@@ -29,14 +29,12 @@ export default function QuoteTool() {
   const [files, setFiles] = useState([])
   const [dragActive, setDragActive] = useState(false)
   const [exporting, setExporting] = useState(false)
-  const [customers, setCustomers] = useState([])
   const inputRef = useRef(null)
   const working = useRef(new Set())
 
   useEffect(() => {
     fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/api/quotes/reply-columns`)
       .then((r) => r.ok ? r.json() : null).then((d) => d?.columns && setReplyColumns(d.columns)).catch(() => {})
-    api.getCustomers().then(setCustomers).catch(() => {})
   }, [])
 
   const patch = useCallback((id, obj) =>
@@ -173,10 +171,9 @@ export default function QuoteTool() {
               <>
                 <div className="flex flex-wrap items-center gap-3">
                   <label className="text-sm font-medium flex items-center gap-1.5 shrink-0"><DollarSign className="h-4 w-4 text-primary" />Customer</label>
-                  <input list={`cust-${f.id}`} value={f.customer || ''} onChange={(e) => setCustomer(f.id, e.target.value)}
+                  <input type="text" value={f.customer || ''} onChange={(e) => setCustomer(f.id, e.target.value)}
                     placeholder="Who is this quote for? (e.g. Boeing, Incora)"
                     className={cn('flex-1 min-w-[220px] px-3 py-1.5 border rounded-md text-sm bg-background', needsCustomer && 'border-amber-400')} />
-                  <datalist id={`cust-${f.id}`}>{customers.map((c) => <option key={c} value={c} />)}</datalist>
                   {needsCustomer && <span className="text-xs text-amber-600 dark:text-amber-400">Enter the customer to price this quote.</span>}
                 </div>
 
