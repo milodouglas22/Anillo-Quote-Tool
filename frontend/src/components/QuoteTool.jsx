@@ -215,12 +215,11 @@ export default function QuoteTool() {
   )
 }
 
-function PreviewTable({ columns, rows, showStatus = false, inScope = () => true, max = 60 }) {
+function PreviewTable({ columns, rows, showStatus = false, inScope = () => true }) {
   const fmt = (v) => (v === null || v === undefined || v === '') ? '' : (typeof v === 'number' ? (Number.isInteger(v) ? v : v.toFixed(4)) : v)
   // Top-100 (in-scope) rows first; out-of-scope collapsed to a count.
   const inRows = rows.filter((r) => inScope(r))
   const outCount = rows.length - inRows.length
-  const shown = inRows.slice(0, max)
 
   if (inRows.length === 0) {
     return (
@@ -230,28 +229,30 @@ function PreviewTable({ columns, rows, showStatus = false, inScope = () => true,
     )
   }
   return (
-    <div className="overflow-x-auto rounded-lg border">
-      <table className="w-full text-sm">
-        <thead className="bg-muted/50">
-          <tr>
-            {showStatus && <th className="px-3 py-2 text-left font-medium">Status</th>}
-            {columns.map((c) => <th key={c} className="px-3 py-2 text-left font-medium whitespace-nowrap">{c}</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {shown.map((r, i) => {
-            const st = r._status
-            const badge = st ? (STATUS[st.rule] || STATUS.flagged) : null
-            return (
-              <tr key={i} className="border-t">
-                {showStatus && <td className="px-3 py-1.5">{badge && <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', badge.cls)}>{badge.label}</span>}</td>}
-                {columns.map((c) => <td key={c} className="px-3 py-1.5 whitespace-nowrap">{fmt(r[c])}</td>)}
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-      {inRows.length > shown.length && <div className="px-3 py-1.5 text-xs text-muted-foreground bg-muted/30">+{inRows.length - shown.length} more Top-100 rows</div>}
+    <div className="rounded-lg border">
+      {/* Long lists scroll inside the table; the page's export bar stays pinned. */}
+      <div className="overflow-auto max-h-[55vh]">
+        <table className="w-full text-sm">
+          <thead className="sticky top-0 z-10 bg-muted">
+            <tr>
+              {showStatus && <th className="px-3 py-2 text-left font-medium">Status</th>}
+              {columns.map((c) => <th key={c} className="px-3 py-2 text-left font-medium whitespace-nowrap">{c}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {inRows.map((r, i) => {
+              const st = r._status
+              const badge = st ? (STATUS[st.rule] || STATUS.flagged) : null
+              return (
+                <tr key={i} className="border-t">
+                  {showStatus && <td className="px-3 py-1.5">{badge && <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', badge.cls)}>{badge.label}</span>}</td>}
+                  {columns.map((c) => <td key={c} className="px-3 py-1.5 whitespace-nowrap">{fmt(r[c])}</td>)}
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
       {outCount > 0 && <div className="px-3 py-1.5 text-xs text-muted-foreground bg-muted/30 border-t">{outCount} other part{outCount > 1 ? 's' : ''} not in Top-100 — excluded from output</div>}
     </div>
   )
