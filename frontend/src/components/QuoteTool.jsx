@@ -23,19 +23,27 @@ const STATUS = {
 let _uid = 0
 const mapSig = (f) => JSON.stringify(f.mapping || {})
 const priceSig = (f) => `${f.customer}|${(f.rows || []).length}|${f.mapped}`
+const normPart = (s) => String(s ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 export default function QuoteTool() {
   const [replyColumns, setReplyColumns] = useState(REPLY_FALLBACK)
   const [files, setFiles] = useState([])
   const [dragActive, setDragActive] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [topSet, setTopSet] = useState(null)   // Set of normalized Top-100 part keys
   const inputRef = useRef(null)
   const working = useRef(new Set())
 
   useEffect(() => {
-    fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/api/quotes/reply-columns`)
+    fetch(`${API}/api/quotes/reply-columns`)
       .then((r) => r.ok ? r.json() : null).then((d) => d?.columns && setReplyColumns(d.columns)).catch(() => {})
+    fetch(`${API}/api/quotes/top-parts`)
+      .then((r) => r.ok ? r.json() : null).then((d) => d?.parts && setTopSet(new Set(d.parts))).catch(() => {})
   }, [])
+
+  const rowInScope = useCallback((r) =>
+    r._status ? r._status.in_scope !== false : (topSet ? topSet.has(normPart(r['Part Number'])) : true), [topSet])
 
   const patch = useCallback((id, obj) =>
     setFiles((prev) => prev.map((f) => f.id === id ? { ...f, ...obj } : f)), [])
@@ -105,9 +113,9 @@ export default function QuoteTool() {
   const setCustomer = (id, customer) => patch(id, { customer })
   const removeFile = (id) => setFiles((prev) => prev.filter((x) => x.id !== id))
 
-  // Always downloadable: priced Top-100 rows where priced, otherwise the parsed rows.
-  const exportRows = files.flatMap((f) =>
-    f.priced ? f.priced.filter((r) => r._status?.in_scope !== false) : (f.rows || []))
+  // Always downloadable, always Top-100 only: priced rows where priced, else parsed rows,
+  // filtered to in-scope parts (prices blank until a customer is entered).
+  const exportRows = files.flatMap((f) => (f.priced || f.rows || []).filter(rowInScope))
   const anyPriced = files.some((f) => f.priced)
   const doExport = async () => {
     setExporting(true)
@@ -183,7 +191,7 @@ export default function QuoteTool() {
                     {outCount > 0 && <span className="text-muted-foreground">{outCount} excluded (not Top-100)</span>}
                   </div>
                 )}
-                <PreviewTable columns={replyColumns} rows={priced || f.rows} showStatus={!!priced} max={priced ? 300 : 8} />
+                <PreviewTable columns={replyColumns} rows={priced || f.rows} showStatus={!!priced} inScope={rowInScope} />
               </>
             )}
           </CardContent>
@@ -207,9 +215,20 @@ export default function QuoteTool() {
   )
 }
 
-function PreviewTable({ columns, rows, showStatus = false, max = 8 }) {
-  const shown = rows.slice(0, max)
+function PreviewTable({ columns, rows, showStatus = false, inScope = () => true, max = 60 }) {
   const fmt = (v) => (v === null || v === undefined || v === '') ? '' : (typeof v === 'number' ? (Number.isInteger(v) ? v : v.toFixed(4)) : v)
+  // Top-100 (in-scope) rows first; out-of-scope collapsed to a count.
+  const inRows = rows.filter((r) => inScope(r))
+  const outCount = rows.length - inRows.length
+  const shown = inRows.slice(0, max)
+
+  if (inRows.length === 0) {
+    return (
+      <div className="rounded-lg border px-3 py-4 text-sm text-muted-foreground bg-muted/20">
+        None of the {rows.length} parts on this quote are in the Top-100 — nothing to price.
+      </div>
+    )
+  }
   return (
     <div className="overflow-x-auto rounded-lg border">
       <table className="w-full text-sm">
@@ -224,7 +243,7 @@ function PreviewTable({ columns, rows, showStatus = false, max = 8 }) {
             const st = r._status
             const badge = st ? (STATUS[st.rule] || STATUS.flagged) : null
             return (
-              <tr key={i} className={cn('border-t', st?.in_scope === false && 'opacity-50')}>
+              <tr key={i} className="border-t">
                 {showStatus && <td className="px-3 py-1.5">{badge && <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', badge.cls)}>{badge.label}</span>}</td>}
                 {columns.map((c) => <td key={c} className="px-3 py-1.5 whitespace-nowrap">{fmt(r[c])}</td>)}
               </tr>
@@ -232,7 +251,8 @@ function PreviewTable({ columns, rows, showStatus = false, max = 8 }) {
           })}
         </tbody>
       </table>
-      {rows.length > shown.length && <div className="px-3 py-1.5 text-xs text-muted-foreground bg-muted/30">+{rows.length - shown.length} more rows</div>}
+      {inRows.length > shown.length && <div className="px-3 py-1.5 text-xs text-muted-foreground bg-muted/30">+{inRows.length - shown.length} more Top-100 rows</div>}
+      {outCount > 0 && <div className="px-3 py-1.5 text-xs text-muted-foreground bg-muted/30 border-t">{outCount} other part{outCount > 1 ? 's' : ''} not in Top-100 — excluded from output</div>}
     </div>
   )
 }

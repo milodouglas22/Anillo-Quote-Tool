@@ -18,6 +18,13 @@ async def customers():
     return {"customers": pricing.customers}
 
 
+@router.get("/top-parts")
+async def top_parts():
+    """Normalized Top-100 part keys, so the UI can flag/sort in-scope parts pre-pricing."""
+    pricing.ensure_loaded()
+    return {"parts": sorted(pricing.top100)}
+
+
 class PriceRequest(BaseModel):
     rows: list[dict]
     customer: str
