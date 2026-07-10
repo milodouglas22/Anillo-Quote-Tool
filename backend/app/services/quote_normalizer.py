@@ -140,6 +140,7 @@ def detect_format(filename: str, content: bytes) -> str:
 # Adapters for known formats
 # --------------------------------------------------------------------------- #
 def _adapt_adept(rows: list[list], res: NormalizeResult) -> None:
+    res.customer_guess = "Adept"   # ADEPT-format quotes come from the customer Adept
     hi = _find_row(rows, "adept part")
     header = [_s(c).lower() for c in rows[hi]]
 
