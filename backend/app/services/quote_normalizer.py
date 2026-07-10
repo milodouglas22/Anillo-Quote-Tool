@@ -35,6 +35,7 @@ class NormalizeResult:
     recognized: bool
     rows: list[dict] = field(default_factory=list)      # reply-format rows (when recognized)
     warnings: list[str] = field(default_factory=list)
+    customer_guess: str = ""                              # best-effort customer parsed from the quote
     # For unknown formats -> data the manual column-matcher needs:
     source_columns: list[str] = field(default_factory=list)
     sample_data: dict = field(default_factory=dict)
@@ -50,6 +51,7 @@ class NormalizeResult:
             "recognized": self.recognized,
             "rows": self.rows,
             "warnings": self.warnings,
+            "customer_guess": self.customer_guess,
             "source_columns": self.source_columns,
             "sample_data": self.sample_data,
             "candidate_rows": self.candidate_rows,
@@ -168,6 +170,14 @@ def _adapt_adept(rows: list[list], res: NormalizeResult) -> None:
 
 
 def _adapt_incora(rows: list[list], res: NormalizeResult) -> None:
+    # customer sits in a label/value pair above the table (e.g. "Customer" | "ASRC Federal")
+    for row in rows[:8]:
+        for j, cell in enumerate(row):
+            if _s(cell).lower() == "customer" and j + 1 < len(row) and _s(row[j + 1]):
+                res.customer_guess = _s(row[j + 1])
+                break
+        if res.customer_guess:
+            break
     hi = _find_row(rows, "customer part")
     header = [_s(c).lower() for c in rows[hi]]
 
@@ -249,6 +259,7 @@ def _adapt_boeing_sap(rows: list[list], res: NormalizeResult) -> None:
         if not any_scale and c_rfqqty is not None and c_rfqqty < len(row):
             rr["Qty 1"] = _num(row[c_rfqqty])
         res.rows.append(rr)
+    res.customer_guess = "Boeing"
     res.warnings.append(
         "Boeing SAP template: quantity breaks are usually specified in the PDF's "
         "'Item Text' (QUOTE X AND Y); the .xlsx only carries RFQ_QUANTITY."
@@ -286,6 +297,7 @@ def _adapt_boeing_pdf(content: bytes, res: NormalizeResult) -> None:
         else:
             rr["Qty 1"] = p["qty_req"]
         res.rows.append(rr)
+    res.customer_guess = "Boeing"
     if not parts:
         res.warnings.append("Could not read line items from the PDF text layer (scanned PDF?).")
     res.warnings.append(

@@ -60,3 +60,6 @@ backend/uploads/*
 .env
 .env.local
 .env.*.local
+
+# Confidential pricing data (loaded at runtime, not committed)
+backend/data/*.xlsx

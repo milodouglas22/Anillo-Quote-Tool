@@ -43,6 +43,22 @@ class ApiService {
     return res.json()
   }
 
+  async getCustomers() {
+    const res = await fetch(`${this.baseUrl}/api/quotes/customers`, { headers: await this._headers() })
+    if (!res.ok) throw new Error(`Customers failed (${res.status})`)
+    return (await res.json()).customers || []
+  }
+
+  async priceRows(rows, customer) {
+    const res = await fetch(`${this.baseUrl}/api/quotes/price`, {
+      method: 'POST',
+      headers: await this._headers({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ rows, customer }),
+    })
+    if (!res.ok) throw new Error(`Pricing failed (${res.status})`)
+    return (await res.json()).rows
+  }
+
   async exportRows(rows, filename = 'anillo_quote.xlsx') {
     const res = await fetch(`${this.baseUrl}/api/quotes/export`, {
       method: 'POST',
