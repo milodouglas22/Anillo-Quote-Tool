@@ -19,7 +19,6 @@ import threading
 from dataclasses import dataclass
 
 import openpyxl
-from rapidfuzz import fuzz
 
 _HERE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # backend/
 CONTRACT_DB_PATH = os.environ.get("CONTRACT_DB_PATH", os.path.join(_HERE, "data", "contract_db.xlsx"))
@@ -154,26 +153,24 @@ class PricingEngine:
         return rec.price
 
     def _match_customer(self, recs: list[ContractRec], customer: str):
-        """Return (matched_rec_or_None, ambiguous: bool)."""
+        """Return (matched_rec_or_None, ambiguous: bool).
+
+        Match on EXACT normalized customer name (or customer id). No fuzzy /
+        containment matching: the quote names a specific entity, and a loose
+        match would e.g. tie 'Boeing Distribution Services' to 'THE BOEING
+        COMPANY' (which normalizes to 'BOEING'). Anything not on contract for
+        the exact entity correctly falls through to the markup path.
+        """
         cn = norm_cust(customer)
         if not cn:
             return None, False
-        exact = [r for r in recs if norm_cust(r.customer_name) == cn or (r.customer_id and r.customer_id == str(customer).strip())]
-        if exact:
-            prices = {r.price for r in exact}
-            return exact[0], len(prices) > 1
-        # fuzzy / containment fallback
-        fuzzy = []
-        for r in recs:
-            rn = norm_cust(r.customer_name)
-            if not rn:
-                continue
-            if cn in rn or rn in cn or fuzz.token_sort_ratio(cn, rn) >= 90:
-                fuzzy.append(r)
-        if fuzzy:
-            prices = {r.price for r in fuzzy}
-            return fuzzy[0], len(prices) > 1
-        return None, False
+        cid = str(customer).strip()
+        matches = [r for r in recs
+                   if norm_cust(r.customer_name) == cn or (r.customer_id and r.customer_id == cid)]
+        if not matches:
+            return None, False
+        prices = {r.price for r in matches}
+        return matches[0], len(prices) > 1
 
     def price(self, part: str, customer: str, qty) -> PriceResult:
         self.ensure_loaded()

@@ -254,7 +254,7 @@ def _adapt_boeing_sap(rows: list[list], res: NormalizeResult) -> None:
         if not any_scale and c_rfqqty is not None and c_rfqqty < len(row):
             rr["Qty 1"] = _num(row[c_rfqqty])
         res.rows.append(rr)
-    res.customer_guess = "Boeing"
+    res.customer_guess = "Boeing Distribution Services"
     res.warnings.append(
         "Boeing SAP template: quantity breaks are usually specified in the PDF's "
         "'Item Text' (QUOTE X AND Y); the .xlsx only carries RFQ_QUANTITY."
@@ -292,7 +292,7 @@ def _adapt_boeing_pdf(content: bytes, res: NormalizeResult) -> None:
         else:
             rr["Qty 1"] = p["qty_req"]
         res.rows.append(rr)
-    res.customer_guess = "Boeing"
+    res.customer_guess = "Boeing Distribution Services"
     if not parts:
         res.warnings.append("Could not read line items from the PDF text layer (scanned PDF?).")
     res.warnings.append(
