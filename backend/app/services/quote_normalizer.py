@@ -170,14 +170,9 @@ def _adapt_adept(rows: list[list], res: NormalizeResult) -> None:
 
 
 def _adapt_incora(rows: list[list], res: NormalizeResult) -> None:
-    # customer sits in a label/value pair above the table (e.g. "Customer" | "ASRC Federal")
-    for row in rows[:8]:
-        for j, cell in enumerate(row):
-            if _s(cell).lower() == "customer" and j + 1 < len(row) and _s(row[j + 1]):
-                res.customer_guess = _s(row[j + 1])
-                break
-        if res.customer_guess:
-            break
+    # The quote is FROM Incora, so the customer we're quoting to is Incora
+    # (the "Customer" field inside the sheet is Incora's own end customer — not ours).
+    res.customer_guess = "Incora"
     hi = _find_row(rows, "customer part")
     header = [_s(c).lower() for c in rows[hi]]
 

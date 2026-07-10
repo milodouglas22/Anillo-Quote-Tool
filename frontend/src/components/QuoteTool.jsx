@@ -45,13 +45,6 @@ export default function QuoteTool() {
     return map
   }, [])
 
-  // match a parsed guess (e.g. "Boeing") to a known contract customer
-  const matchCustomer = useCallback((guess) => {
-    if (!guess) return ''
-    const g = guess.toLowerCase()
-    return customers.find((c) => c.toLowerCase().includes(g) || g.includes(c.toLowerCase())) || guess
-  }, [customers])
-
   const patch = (id, obj) => setFiles((prev) => prev.map((f) => f.id === id ? { ...f, ...obj } : f))
 
   const handleFiles = useCallback(async (fileList) => {
@@ -64,11 +57,11 @@ export default function QuoteTool() {
         patch(id, {
           busy: false, ...res,
           mapping: res.recognized ? null : initMapping(res.suggestions, cols),
-          customer: matchCustomer(res.customer_guess), priced: null,
+          customer: res.customer_guess || '', priced: null,
         })
       } catch (e) { patch(id, { busy: false, error: e.message }) }
     }
-  }, [replyColumns, initMapping, matchCustomer])
+  }, [replyColumns, initMapping])
 
   const onDrop = (e) => { e.preventDefault(); setDragActive(false); if (e.dataTransfer.files?.length) handleFiles(e.dataTransfer.files) }
 
