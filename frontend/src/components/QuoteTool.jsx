@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Upload, FileSpreadsheet, FileText, AlertTriangle, CheckCircle2, Download, X, Loader2, Wand2, DollarSign } from 'lucide-react'
+import { Upload, FileSpreadsheet, FileText, AlertTriangle, CheckCircle2, Download, X, Loader2, DollarSign } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
@@ -21,6 +21,8 @@ const STATUS = {
   out_of_scope:{ label: 'Not Top-100', cls: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400' },
 }
 let _uid = 0
+const mapSig = (f) => JSON.stringify(f.mapping || {})
+const priceSig = (f) => `${f.customer}|${(f.rows || []).length}|${f.mapped}`
 
 export default function QuoteTool() {
   const [replyColumns, setReplyColumns] = useState(REPLY_FALLBACK)
@@ -29,12 +31,16 @@ export default function QuoteTool() {
   const [exporting, setExporting] = useState(false)
   const [customers, setCustomers] = useState([])
   const inputRef = useRef(null)
+  const working = useRef(new Set())
 
   useEffect(() => {
     fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/api/quotes/reply-columns`)
       .then((r) => r.ok ? r.json() : null).then((d) => d?.columns && setReplyColumns(d.columns)).catch(() => {})
     api.getCustomers().then(setCustomers).catch(() => {})
   }, [])
+
+  const patch = useCallback((id, obj) =>
+    setFiles((prev) => prev.map((f) => f.id === id ? { ...f, ...obj } : f)), [])
 
   const initMapping = useCallback((suggestions, replyCols) => {
     const map = {}; const used = new Set()
@@ -44,8 +50,6 @@ export default function QuoteTool() {
     }
     return map
   }, [])
-
-  const patch = (id, obj) => setFiles((prev) => prev.map((f) => f.id === id ? { ...f, ...obj } : f))
 
   const handleFiles = useCallback(async (fileList) => {
     for (const file of Array.from(fileList)) {
@@ -61,32 +65,52 @@ export default function QuoteTool() {
         })
       } catch (e) { patch(id, { busy: false, error: e.message }) }
     }
-  }, [replyColumns, initMapping])
+  }, [replyColumns, initMapping, patch])
+
+  // ---- automatic mapping + pricing (debounced), no buttons ----
+  useEffect(() => {
+    const t = setTimeout(() => {
+      for (const f of files) {
+        if (f.busy || f.error) continue
+
+        // unknown format: auto-apply mapping once Part Number is mapped and mapping changed
+        if (f.detected_format === 'unknown' && f.mapping?.['Part Number'] && mapSig(f) !== f._mapSig) {
+          const k = 'map' + f.id
+          if (working.current.has(k)) continue
+          working.current.add(k)
+          const sig = mapSig(f)
+          api.applyMapping(f.raw_records, f.mapping)
+            .then((res) => patch(f.id, { rows: res.rows, mapped: true, _mapSig: sig, priced: null, _priceSig: null }))
+            .catch((e) => patch(f.id, { error: e.message }))
+            .finally(() => working.current.delete(k))
+          continue
+        }
+
+        // auto-price once we have rows + a customer, whenever inputs changed
+        if ((f.recognized || f.mapped) && f.rows?.length && f.customer && priceSig(f) !== f._priceSig) {
+          const k = 'price' + f.id
+          if (working.current.has(k)) continue
+          working.current.add(k)
+          const sig = priceSig(f)
+          api.priceRows(f.rows, f.customer)
+            .then((rows) => patch(f.id, { priced: rows, _priceSig: sig }))
+            .catch((e) => patch(f.id, { error: e.message }))
+            .finally(() => working.current.delete(k))
+        }
+      }
+    }, 350)
+    return () => clearTimeout(t)
+  }, [files, patch])
 
   const onDrop = (e) => { e.preventDefault(); setDragActive(false); if (e.dataTransfer.files?.length) handleFiles(e.dataTransfer.files) }
-
-  const applyMapping = async (id) => {
-    const f = files.find((x) => x.id === id); if (!f) return
-    patch(id, { busy: true })
-    try {
-      const res = await api.applyMapping(f.raw_records, f.mapping)
-      patch(id, { busy: false, rows: res.rows, mapped: true, priced: null })
-    } catch (e) { patch(id, { busy: false, error: e.message }) }
-  }
-
-  const priceFile = async (id) => {
-    const f = files.find((x) => x.id === id); if (!f || !f.customer || !f.rows?.length) return
-    patch(id, { busy: true })
-    try { patch(id, { busy: false, priced: await api.priceRows(f.rows, f.customer) }) }
-    catch (e) { patch(id, { busy: false, error: e.message }) }
-  }
-
-  const setMapping = (id, mapping) => patch(id, { mapping, mapped: false, priced: null })
-  const setCustomer = (id, customer) => patch(id, { customer, priced: null })
+  const setMapping = (id, mapping) => patch(id, { mapping })
+  const setCustomer = (id, customer) => patch(id, { customer })
   const removeFile = (id) => setFiles((prev) => prev.filter((x) => x.id !== id))
 
-  // export combines each file's in-scope priced rows (Top-100 only); _status ignored by builder
-  const exportRows = files.flatMap((f) => (f.priced || []).filter((r) => r._status?.in_scope !== false))
+  // Always downloadable: priced Top-100 rows where priced, otherwise the parsed rows.
+  const exportRows = files.flatMap((f) =>
+    f.priced ? f.priced.filter((r) => r._status?.in_scope !== false) : (f.rows || []))
+  const anyPriced = files.some((f) => f.priced)
   const doExport = async () => {
     setExporting(true)
     try { await api.exportRows(exportRows, 'anillo_quote.xlsx') }
@@ -95,7 +119,6 @@ export default function QuoteTool() {
 
   return (
     <div className="space-y-6">
-      {/* Dropzone */}
       <div onDragOver={(e) => { e.preventDefault(); setDragActive(true) }} onDragLeave={() => setDragActive(false)}
         onDrop={onDrop} onClick={() => inputRef.current?.click()}
         className={cn('rounded-xl border-2 border-dashed p-10 text-center cursor-pointer transition-colors',
@@ -104,12 +127,16 @@ export default function QuoteTool() {
           onChange={(e) => e.target.files?.length && handleFiles(e.target.files)} />
         <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-3" />
         <p className="font-medium">Drop a quote file here, or click to browse</p>
-        <p className="text-sm text-muted-foreground mt-1">Excel (.xlsx) or PDF — each file is one customer's quote</p>
+        <p className="text-sm text-muted-foreground mt-1">Excel (.xlsx) or PDF — it parses and prices automatically</p>
       </div>
 
       {files.map((f) => {
-        const flaggedCount = (f.priced || []).filter((r) => r._status?.flagged).length
-        const outCount = (f.priced || []).filter((r) => r._status?.in_scope === false).length
+        const priced = f.priced
+        const pricing = working.current.has('price' + f.id) || working.current.has('map' + f.id)
+        const needsCustomer = (f.recognized || f.mapped) && f.rows?.length && !f.customer
+        const flaggedCount = (priced || []).filter((r) => r._status?.flagged).length
+        const outCount = (priced || []).filter((r) => r._status?.in_scope === false).length
+        const inCount = (priced || []).filter((r) => r._status?.in_scope !== false).length
         return (
         <Card key={f.id}>
           <CardContent className="pt-5 space-y-3">
@@ -119,7 +146,7 @@ export default function QuoteTool() {
                   ? <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
                   : <FileSpreadsheet className="h-5 w-5 text-muted-foreground shrink-0" />}
                 <span className="font-medium truncate">{f.filename}</span>
-                {f.busy && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                {(f.busy || pricing) && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
                 {f.detected_format && (
                   <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium shrink-0',
                     f.recognized ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
@@ -127,7 +154,7 @@ export default function QuoteTool() {
                     {FORMAT_LABELS[f.detected_format] || f.detected_format}
                   </span>
                 )}
-                {(f.recognized || f.mapped) && f.rows?.length > 0 && <span className="text-xs text-muted-foreground shrink-0">{f.rows.length} parts</span>}
+                {priced && <span className="text-xs text-muted-foreground shrink-0">{inCount} priced{outCount ? ` · ${outCount} excluded` : ''}</span>}
               </div>
               <button onClick={() => removeFile(f.id)} className="p-1 rounded hover:bg-muted shrink-0"><X className="h-4 w-4" /></button>
             </div>
@@ -138,39 +165,28 @@ export default function QuoteTool() {
             ))}
 
             {f.detected_format === 'unknown' && !f.error && (
-              <div className="space-y-3">
-                <ColumnMapper replyColumns={replyColumns} sourceColumns={f.source_columns || []} sampleData={f.sample_data}
-                  suggestions={f.suggestions} mapping={f.mapping || {}} onChange={(m) => setMapping(f.id, m)} />
-                <Button size="sm" onClick={() => applyMapping(f.id)} disabled={f.busy || !f.mapping?.['Part Number']}>
-                  <Wand2 className="h-4 w-4 mr-1.5" /> Apply mapping
-                </Button>
-              </div>
+              <ColumnMapper replyColumns={replyColumns} sourceColumns={f.source_columns || []} sampleData={f.sample_data}
+                suggestions={f.suggestions} mapping={f.mapping || {}} onChange={(m) => setMapping(f.id, m)} />
             )}
 
-            {/* Per-file customer + pricing */}
             {(f.recognized || f.mapped) && f.rows?.length > 0 && (
               <>
-                <div className="flex flex-wrap items-end gap-3 pt-1">
-                  <div className="flex-1 min-w-[240px]">
-                    <label className="text-sm font-medium flex items-center gap-1.5 mb-1"><DollarSign className="h-4 w-4 text-primary" />Customer for this quote</label>
-                    <input list={`cust-${f.id}`} value={f.customer || ''} onChange={(e) => setCustomer(f.id, e.target.value)}
-                      placeholder={f.customer_guess ? `Parsed: ${f.customer_guess} — confirm/adjust` : 'Type or select the customer…'}
-                      className="w-full px-3 py-2 border rounded-md text-sm bg-background" />
-                    <datalist id={`cust-${f.id}`}>{customers.map((c) => <option key={c} value={c} />)}</datalist>
-                  </div>
-                  <Button onClick={() => priceFile(f.id)} disabled={f.busy || !f.customer}>
-                    {f.busy ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Wand2 className="h-4 w-4 mr-1.5" />}
-                    Apply pricing
-                  </Button>
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="text-sm font-medium flex items-center gap-1.5 shrink-0"><DollarSign className="h-4 w-4 text-primary" />Customer</label>
+                  <input list={`cust-${f.id}`} value={f.customer || ''} onChange={(e) => setCustomer(f.id, e.target.value)}
+                    placeholder="Who is this quote for? (e.g. Boeing, Incora)"
+                    className={cn('flex-1 min-w-[220px] px-3 py-1.5 border rounded-md text-sm bg-background', needsCustomer && 'border-amber-400')} />
+                  <datalist id={`cust-${f.id}`}>{customers.map((c) => <option key={c} value={c} />)}</datalist>
+                  {needsCustomer && <span className="text-xs text-amber-600 dark:text-amber-400">Enter the customer to price this quote.</span>}
                 </div>
 
-                {f.priced && (flaggedCount > 0 || outCount > 0) && (
+                {priced && (flaggedCount > 0 || outCount > 0) && (
                   <div className="flex flex-wrap gap-3 text-xs">
                     {flaggedCount > 0 && <span className="flex items-center gap-1 text-amber-700 dark:text-amber-400"><AlertTriangle className="h-3.5 w-3.5" />{flaggedCount} flagged for manual pricing</span>}
                     {outCount > 0 && <span className="text-muted-foreground">{outCount} excluded (not Top-100)</span>}
                   </div>
                 )}
-                <PreviewTable columns={replyColumns} rows={f.priced || f.rows} showStatus={!!f.priced} max={f.priced ? 200 : 8} />
+                <PreviewTable columns={replyColumns} rows={priced || f.rows} showStatus={!!priced} max={priced ? 300 : 8} />
               </>
             )}
           </CardContent>
@@ -181,8 +197,8 @@ export default function QuoteTool() {
         <div className="sticky bottom-4 flex items-center justify-between gap-4 rounded-xl border bg-card/95 backdrop-blur p-4 shadow-lg">
           <div className="flex items-center gap-2 text-sm">
             <CheckCircle2 className="h-5 w-5 text-primary" />
-            <span className="font-medium">{exportRows.length} priced parts</span>
-            <span className="text-muted-foreground">ready to export</span>
+            <span className="font-medium">{exportRows.length} parts</span>
+            <span className="text-muted-foreground">{anyPriced ? 'priced & ready to export' : 'parsed — enter a customer to price, or export as-is'}</span>
           </div>
           <Button onClick={doExport} disabled={exporting}>
             {exporting ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Download className="h-4 w-4 mr-1.5" />}
