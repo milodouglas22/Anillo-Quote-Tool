@@ -1,0 +1,25 @@
+# Web Framework
+fastapi==0.136.1
+uvicorn==0.46.0
+pydantic==2.13.3
+pydantic-settings==2.14.0
+python-multipart==0.0.26
+
+# Data Processing
+pandas==3.0.2
+numpy==2.4.4
+openpyxl==3.1.5
+xlsxwriter==3.2.9
+rapidfuzz==3.10.1
+pdfplumber==0.11.4
+
+# Authentication
+PyJWT==2.12.1
+cryptography==46.0.7
+
+# HTTP
+requests==2.33.1
+httpx==0.28.1
+
+# Utilities
+python-dotenv==1.2.2

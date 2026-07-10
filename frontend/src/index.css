@@ -1,0 +1,62 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@import "tailwindcss";
+
+@theme {
+  --color-background: #ffffff;
+  --color-foreground: #0a0f0e;
+  --color-primary: #234948;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #C9E5E4;
+  --color-secondary-foreground: #234948;
+  --color-muted: #f0f7f7;
+  --color-muted-foreground: #5a6c6b;
+  --color-accent: #8CB4AB;
+  --color-accent-foreground: #234948;
+  --color-destructive: #dc2626;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #D9D9D9;
+  --color-input: #D9D9D9;
+  --color-ring: #234948;
+  --color-card: #ffffff;
+  --color-card-foreground: #0a0f0e;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #0a0f0e;
+
+  --radius-lg: 0.5rem;
+  --radius-md: calc(0.5rem - 2px);
+  --radius-sm: calc(0.5rem - 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  .dark {
+    --color-background: #0a0f0e;
+    --color-foreground: #f0f7f7;
+    --color-primary: #3d7c79;
+    --color-primary-foreground: #ffffff;
+    --color-secondary: #2d4d4c;
+    --color-secondary-foreground: #f0f7f7;
+    --color-muted: #1a2928;
+    --color-muted-foreground: #8a9a99;
+    --color-accent: #3d7c79;
+    --color-accent-foreground: #f0f7f7;
+    --color-destructive: #ef4444;
+    --color-destructive-foreground: #ffffff;
+    --color-border: #2d4d4c;
+    --color-input: #2d4d4c;
+    --color-ring: #3d7c79;
+    --color-card: #0f1716;
+    --color-card-foreground: #f0f7f7;
+    --color-popover: #0f1716;
+    --color-popover-foreground: #f0f7f7;
+  }
+}
