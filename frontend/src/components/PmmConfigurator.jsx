@@ -104,11 +104,16 @@ export default function PmmConfigurator({ part, qtys, initial, onBack, onSave })
               <Detail label="Framework" value={isTradeBrand ? 'Trade Brand' : 'Platform Maturity'} />
               <Detail label="Anchor Qty" value={qtyf(ctx.anchor_qty)} />
               <Detail label="Total Unit Cost" value={cents(ctx.cost_per_unit)} />
-              <hr className="border-border" />
-              <Detail label="Last Order Price" value={cents(ref?.unit_price)} />
-              <Detail label="Last Order Qty" value={qtyf(ref?.qty)} />
-              <Detail label="Last Order Date" value={datef(ref?.date)} />
-              <Detail label="Last Order Customer" value={ref?.customer} />
+            </div>
+          </div>
+
+          <div className="bg-card rounded-lg p-4 border">
+            <h3 className="font-semibold text-base uppercase tracking-wide mb-3 text-primary">Reference Order</h3>
+            <div className="space-y-2 text-base">
+              <Detail label="Price" value={cents(ref?.unit_price)} />
+              <Detail label="Quantity" value={qtyf(ref?.qty)} />
+              <Detail label="Date" value={datef(ref?.date)} />
+              <Detail label="Customer" value={ref?.customer} />
             </div>
           </div>
 
