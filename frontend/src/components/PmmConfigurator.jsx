@@ -202,10 +202,10 @@ export default function PmmConfigurator({ part, qtys, initial, onBack, onSave })
             <h3 className="font-semibold text-base uppercase tracking-wide mb-3 text-primary">New Quote Price</h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {(result?.prices || []).map((p, i) => (
-                <div key={i} className="rounded-lg border p-3 text-center">
-                  <div className="text-xs text-muted-foreground">{qtyf(p.qty)} units</div>
-                  <div className="text-2xl font-bold text-foreground mt-1 tabular-nums">{cents(p.unit_price)}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">GM {pct(p.gross_margin)}</div>
+                <div key={i} className="rounded-lg border p-4 text-center">
+                  <div className="text-base text-muted-foreground">{qtyf(p.qty)} units</div>
+                  <div className="text-3xl font-bold text-foreground mt-1 tabular-nums">{cents(p.unit_price)}</div>
+                  <div className="text-sm text-muted-foreground mt-1">GM {pct(p.gross_margin)}</div>
                 </div>
               ))}
               {!result?.prices?.length && <div className="text-sm text-muted-foreground">No quantities to price.</div>}
