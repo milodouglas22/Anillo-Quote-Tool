@@ -2,7 +2,12 @@ import { X, ShoppingCart, Trash2, Download, Loader2, Pencil, AlertTriangle, Chec
 import { cn } from '@/lib/utils'
 
 const money0 = (v) => '$' + Math.round(Number(v) || 0).toLocaleString()
-const cents = (v) => v == null || v === '' ? '—' : (Number(v) * 100).toFixed(2) + '¢'
+// unit prices & cost: $ with 2dp when >= $1, otherwise cents with 2dp
+const cents = (v) => {
+  if (v == null || v === '') return '—'
+  const n = Number(v)
+  return Math.abs(n) >= 1 ? '$' + n.toFixed(2) : (n * 100).toFixed(2) + '¢'
+}
 const qtyf = (v) => v == null ? '' : Number(v).toLocaleString()
 
 function info(row) {

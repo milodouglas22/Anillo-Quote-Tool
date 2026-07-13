@@ -5,8 +5,13 @@ import { cn } from '@/lib/utils'
 
 const inputCls = 'w-full border rounded-md px-3 py-2 text-base bg-background focus:outline-none focus:ring-2 focus:ring-ring'
 const money2 = (v) => v == null || v === '' ? '—' : '$' + Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-// unit prices & unit cost are shown in cents with 2 decimals (e.g. 99.80¢)
-const cents = (v) => v == null || v === '' ? '—' : (Number(v) * 100).toFixed(2) + '¢'
+const dec2 = (v) => v == null || v === '' ? '—' : Number(v).toFixed(2)
+// unit prices & cost: $ with 2dp when >= $1, otherwise cents with 2dp
+const cents = (v) => {
+  if (v == null || v === '') return '—'
+  const n = Number(v)
+  return Math.abs(n) >= 1 ? '$' + n.toFixed(2) : (n * 100).toFixed(2) + '¢'
+}
 const pct = (v) => v == null ? '—' : (Number(v) * 100).toFixed(1) + '%'
 const qtyf = (v) => v == null ? '' : Number(v).toLocaleString()
 const datef = (v) => !v ? '—' : String(v).slice(0, 10)
@@ -211,8 +216,8 @@ export default function PmmConfigurator({ part, qtys, initial, onBack, onSave })
                 <Row k="Governing rule" v={result?.prices?.[0]?.governing_rule} strong />
                 <Row k={`Min GM% floor (${pct(shared.min_gm_pct)})`} v={cents(shared.helper_min_gm_or_maturity)} />
                 <Row k="Min / Max YoY" v={`${cents(shared.min_yoy_price)} / ${cents(shared.max_yoy_price)}`} />
-                <Row k="Volume factor" v={shared.volume_factor} />
-                <Row k="Cust×Order multiplier" v={shared.multiplier} />
+                <Row k="Volume factor" v={dec2(shared.volume_factor)} />
+                <Row k="Cust×Order multiplier" v={dec2(shared.multiplier)} />
               </div>
             )}
             <div className="flex justify-end mt-4">
