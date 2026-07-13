@@ -1,12 +1,8 @@
-import { X, ShoppingCart, Trash2, Download, Loader2, Pencil, AlertTriangle } from 'lucide-react'
+import { X, ShoppingCart, Trash2, Download, Loader2, Pencil, AlertTriangle, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-const STATUS = {
-  contract:   { label: 'Contract',   cls: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' },
-  markup_40:  { label: '+40%',       cls: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' },
-  markup_60:  { label: '+60%',       cls: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200' },
-}
-const money = (v) => v == null || v === '' ? '—' : '$' + Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })
+const money0 = (v) => '$' + Math.round(Number(v) || 0).toLocaleString()
+const cents = (v) => v == null || v === '' ? '—' : (Number(v) * 100).toFixed(2) + '¢'
 const qtyf = (v) => v == null ? '' : Number(v).toLocaleString()
 
 function info(row) {
@@ -19,7 +15,7 @@ function info(row) {
   let badge
   if (pmm) badge = { label: pmm.framework?.startsWith('Trade') ? `Trade Brand · ${String(pmm.trade || '').replace(' Position', '')}` : 'Platform Maturity',
                      cls: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200' }
-  else if (st) badge = STATUS[st.rule] || { label: st.rule, cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200' }
+  else if (st) badge = { label: 'Price List', cls: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' }
   return { breaks, gm: pmm?.gm, cost: pmm?.cost, badge, configurable: !!pmm }
 }
 
@@ -62,12 +58,13 @@ export default function QuoteCart({ open, onClose, lines, onSelect, onRemove, on
                       <div className="flex items-center gap-2">
                         <span className="font-medium truncate text-primary" title={row['Part Number']}>{row['Part Number']}</span>
                         {l.badge && <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0', l.badge.cls)}>{l.badge.label}</span>}
+                        {row._repriced && <span className="px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 inline-flex items-center gap-0.5"><Check className="w-3 h-3" /> Re-priced</span>}
                       </div>
                       <div className="text-sm text-muted-foreground mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
-                        {l.breaks.map((b, j) => <span key={j} className="tabular-nums">{qtyf(b.qty)}: <span className="text-foreground font-medium">{money(b.price)}</span></span>)}
+                        {l.breaks.map((b, j) => <span key={j} className="tabular-nums">{qtyf(b.qty)}: <span className="text-foreground font-medium">{cents(b.price)}</span></span>)}
                       </div>
                       <div className="text-xs text-muted-foreground mt-0.5">
-                        Cost: <span className="text-foreground">{money(l.cost)}</span><span className="mx-2">·</span>
+                        Cost: <span className="text-foreground">{cents(l.cost)}</span><span className="mx-2">·</span>
                         GM%: <span className="text-foreground">{l.gm != null ? (l.gm * 100).toFixed(1) + '%' : '—'}</span>
                       </div>
                     </div>
@@ -88,7 +85,7 @@ export default function QuoteCart({ open, onClose, lines, onSelect, onRemove, on
           {lines.length > 0 && (
             <div className="px-5 py-3 border-b text-sm flex items-center justify-between">
               <span><span className="text-muted-foreground">Total units:</span> <span className="font-semibold text-primary">{totalUnits.toLocaleString()}</span></span>
-              <span><span className="text-muted-foreground">Total:</span> <span className="font-semibold text-primary">{money(totalRevenue)}</span></span>
+              <span><span className="text-muted-foreground">Total:</span> <span className="font-semibold text-primary">{money0(totalRevenue)}</span></span>
             </div>
           )}
           <div className="px-5 py-4 flex items-center justify-between gap-3">

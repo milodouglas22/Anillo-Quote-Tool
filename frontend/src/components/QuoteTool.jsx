@@ -104,7 +104,7 @@ export default function QuoteTool() {
       for (const r of (f.basketRows || [])) {
         const key = `${f.id}|${r['Part Number']}`
         if (removed[key]) continue
-        out.push(overrides[key] ? { ...overrides[key], _key: key } : { ...r, _key: key })
+        out.push(overrides[key] ? { ...overrides[key], _key: key, _repriced: true } : { ...r, _key: key })
       }
     }
     return out

@@ -4,8 +4,9 @@ import api from '@/services/ApiService'
 import { cn } from '@/lib/utils'
 
 const inputCls = 'w-full border rounded-md px-3 py-2 text-base bg-background focus:outline-none focus:ring-2 focus:ring-ring'
-const money = (v) => v == null || v === '' ? '—' : '$' + Number(v).toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })
 const money2 = (v) => v == null || v === '' ? '—' : '$' + Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+// unit prices & unit cost are shown in cents with 2 decimals (e.g. 99.80¢)
+const cents = (v) => v == null || v === '' ? '—' : (Number(v) * 100).toFixed(2) + '¢'
 const pct = (v) => v == null ? '—' : (Number(v) * 100).toFixed(1) + '%'
 const qtyf = (v) => v == null ? '' : Number(v).toLocaleString()
 const datef = (v) => !v ? '—' : String(v).slice(0, 10)
@@ -96,9 +97,9 @@ export default function PmmConfigurator({ part, qtys, initial, onBack, onSave })
               <Detail label="Maturity" value={ctx.maturity} />
               <Detail label="Framework" value={isTradeBrand ? 'Trade Brand' : 'Platform Maturity'} />
               <Detail label="Anchor Qty" value={qtyf(ctx.anchor_qty)} />
-              <Detail label="Total Unit Cost" value={money(ctx.cost_per_unit)} />
+              <Detail label="Total Unit Cost" value={cents(ctx.cost_per_unit)} />
               <hr className="border-border" />
-              <Detail label="Last Order Price" value={money(ref?.unit_price)} />
+              <Detail label="Last Order Price" value={cents(ref?.unit_price)} />
               <Detail label="Last Order Qty" value={qtyf(ref?.qty)} />
               <Detail label="Last Order Date" value={datef(ref?.date)} />
               <Detail label="Last Order Customer" value={ref?.customer} />
@@ -151,9 +152,12 @@ export default function PmmConfigurator({ part, qtys, initial, onBack, onSave })
         {/* Right: Order History */}
         <div className="lg:col-span-8 space-y-4">
           <div className="border rounded-lg p-5 bg-card">
-            <h3 className="font-semibold text-base uppercase tracking-wide mb-3 text-primary flex items-center gap-2">
-              Order History {pricing && <Loader2 className="h-4 w-4 animate-spin" />}
-            </h3>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="font-semibold text-base uppercase tracking-wide text-primary flex items-center gap-2">
+                Order History {pricing && <Loader2 className="h-4 w-4 animate-spin" />}
+              </h3>
+              <span className="text-xs text-muted-foreground">Click a row to set the reference order</span>
+            </div>
             {orders.length === 0 ? (
               <p className="text-muted-foreground">No order history for this part.</p>
             ) : (
@@ -178,7 +182,7 @@ export default function PmmConfigurator({ part, qtys, initial, onBack, onSave })
                         <td className="py-1.5 px-2 text-left truncate max-w-[180px]" title={o.customer}>{o.customer || '—'}</td>
                         <td className="py-1.5 px-2">{o.customer_type || '—'}</td>
                         <td className="py-1.5 px-2">{qtyf(o.qty)}</td>
-                        <td className="py-1.5 px-2">{money(o.unit_price)}</td>
+                        <td className="py-1.5 px-2">{cents(o.unit_price)}</td>
                         <td className="py-1.5 px-2">{money2(o.qty * o.unit_price)}</td>
                       </tr>
                     ))}
@@ -186,7 +190,6 @@ export default function PmmConfigurator({ part, qtys, initial, onBack, onSave })
                 </table>
               </div>
             )}
-            <p className="text-xs text-muted-foreground mt-2">Reference order: <span className="font-medium text-foreground">{ref ? `${datef(ref.date)} · ${ref.customer} · ${qtyf(ref.qty)} @ ${money(ref.unit_price)}` : '—'}</span> (click a row to change)</p>
           </div>
 
           {/* Results */}
@@ -196,7 +199,7 @@ export default function PmmConfigurator({ part, qtys, initial, onBack, onSave })
               {(result?.prices || []).map((p, i) => (
                 <div key={i} className="rounded-lg border p-3 text-center">
                   <div className="text-xs text-muted-foreground">{qtyf(p.qty)} units</div>
-                  <div className="text-2xl font-bold text-foreground mt-1 tabular-nums">{money(p.unit_price)}</div>
+                  <div className="text-2xl font-bold text-foreground mt-1 tabular-nums">{cents(p.unit_price)}</div>
                   <div className="text-xs text-muted-foreground mt-0.5">GM {pct(p.gross_margin)}</div>
                 </div>
               ))}
@@ -204,10 +207,10 @@ export default function PmmConfigurator({ part, qtys, initial, onBack, onSave })
             </div>
             {shared && (
               <div className="mt-4 rounded-lg bg-muted/30 p-3 text-sm grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
-                <Row k="Reference price" v={money(shared.reference_price)} />
+                <Row k="Reference price" v={cents(shared.reference_price)} />
                 <Row k="Governing rule" v={result?.prices?.[0]?.governing_rule} strong />
-                <Row k={`Min GM% floor (${pct(shared.min_gm_pct)})`} v={money(shared.helper_min_gm_or_maturity)} />
-                <Row k="Min / Max YoY" v={`${money(shared.min_yoy_price)} / ${money(shared.max_yoy_price)}`} />
+                <Row k={`Min GM% floor (${pct(shared.min_gm_pct)})`} v={cents(shared.helper_min_gm_or_maturity)} />
+                <Row k="Min / Max YoY" v={`${cents(shared.min_yoy_price)} / ${cents(shared.max_yoy_price)}`} />
                 <Row k="Volume factor" v={shared.volume_factor} />
                 <Row k="Cust×Order multiplier" v={shared.multiplier} />
               </div>
