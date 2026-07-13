@@ -82,15 +82,7 @@ function App() {
 
       {/* Main Content */}
       <main className="flex-1 w-full">
-        <div className="container mx-auto max-w-5xl px-4 py-8 space-y-4">
-          <div>
-            <h2 className="text-2xl font-semibold">Normalize incoming quotes</h2>
-            <p className="text-muted-foreground mt-1">
-              Upload customer RFQs / quotes in any format (ADEPT, Incora, Boeing, or unknown).
-              Recognized formats convert automatically; unknown ones fall back to guided column matching.
-              Export a single standardized reply-format workbook.
-            </p>
-          </div>
+        <div className="container mx-auto max-w-[1400px] px-4 py-6">
           <QuoteTool />
         </div>
       </main>

@@ -140,8 +140,7 @@ export default function QuoteTool() {
   return (
     <div className="space-y-5">
       {/* top bar */}
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">Upload a customer quote — Top-100 parts price automatically; the rest go into the quote for Trade-Brand pricing.</p>
+      <div className="flex items-center justify-end">
         <Button variant={cartLines.length ? 'default' : 'outline'} onClick={() => setShowCart(true)} disabled={!cartLines.length}>
           <ShoppingCart className="h-4 w-4 mr-1.5" /> Quote ({cartLines.length})
         </Button>
