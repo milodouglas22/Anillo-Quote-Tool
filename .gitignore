@@ -63,3 +63,4 @@ backend/uploads/*
 
 # Confidential pricing data (loaded at runtime, not committed)
 backend/data/*.xlsx
+backend/data/pmm_workbook.xlsx
