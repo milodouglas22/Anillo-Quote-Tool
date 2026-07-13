@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import api from '@/services/ApiService'
 import ColumnMapper from '@/components/ColumnMapper'
+import PmmBasket from '@/components/PmmBasket'
 
 const REPLY_FALLBACK = ['Part Number','Qty 1','Price 1','Qty 2','Price 2','Qty 3','Price 3','L/T','MFG','REV']
 const FORMAT_LABELS = {
@@ -44,6 +45,7 @@ export default function QuoteTool() {
 
   const rowInScope = useCallback((r) =>
     r._status ? r._status.in_scope !== false : (topSet ? topSet.has(normPart(r['Part Number'])) : true), [topSet])
+  const isTop100 = useCallback((pn) => topSet ? topSet.has(normPart(pn)) : false, [topSet])
 
   const patch = useCallback((id, obj) =>
     setFiles((prev) => prev.map((f) => f.id === id ? { ...f, ...obj } : f)), [])
@@ -113,10 +115,12 @@ export default function QuoteTool() {
   const setCustomer = (id, customer) => patch(id, { customer })
   const removeFile = (id) => setFiles((prev) => prev.filter((x) => x.id !== id))
 
-  // Always downloadable, always Top-100 only: priced rows where priced, else parsed rows,
-  // filtered to in-scope parts (prices blank until a customer is entered).
-  const exportRows = files.flatMap((f) => (f.priced || f.rows || []).filter(rowInScope))
-  const anyPriced = files.some((f) => f.priced)
+  // Export merges Top-100 (contract/markup) rows + the PMM basket rows for each file.
+  const exportRows = files.flatMap((f) => [
+    ...((f.priced || f.rows || []).filter(rowInScope)),
+    ...(f.basketRows || []),
+  ])
+  const anyPriced = files.some((f) => f.priced || f.basketRows?.length)
   const doExport = async () => {
     setExporting(true)
     try { await api.exportRows(exportRows, 'anillo_quote.xlsx') }
@@ -143,6 +147,14 @@ export default function QuoteTool() {
         const flaggedCount = (priced || []).filter((r) => r._status?.flagged).length
         const outCount = (priced || []).filter((r) => r._status?.in_scope === false).length
         const inCount = (priced || []).filter((r) => r._status?.in_scope !== false).length
+        // non-Top-100 parts → PMM basket items {part, qtys}
+        const basketItems = (f.rows || [])
+          .filter((r) => r['Part Number'] && !isTop100(r['Part Number']))
+          .map((r) => ({
+            part: r['Part Number'],
+            qtys: ['Qty 1', 'Qty 2', 'Qty 3'].map((k) => r[k])
+              .filter((q) => q !== null && q !== '' && q !== undefined).map(Number),
+          }))
         return (
         <Card key={f.id}>
           <CardContent className="pt-5 space-y-3">
@@ -191,7 +203,16 @@ export default function QuoteTool() {
                     {outCount > 0 && <span className="text-muted-foreground">{outCount} excluded (not Top-100)</span>}
                   </div>
                 )}
-                <PreviewTable columns={replyColumns} rows={priced || f.rows} showStatus={!!priced} inScope={rowInScope} />
+                {(priced || f.rows).some(rowInScope) && (
+                  <div className="space-y-1.5">
+                    <div className="text-xs font-medium text-muted-foreground">Top-100 parts — contract / markup pricing</div>
+                    <PreviewTable columns={replyColumns} rows={priced || f.rows} showStatus={!!priced} inScope={rowInScope} />
+                  </div>
+                )}
+                {basketItems.length > 0 && (
+                  <PmmBasket items={basketItems} customerName={f.customer}
+                    onRows={(rows) => patch(f.id, { basketRows: rows })} />
+                )}
               </>
             )}
           </CardContent>
@@ -219,7 +240,6 @@ function PreviewTable({ columns, rows, showStatus = false, inScope = () => true 
   const fmt = (v) => (v === null || v === undefined || v === '') ? '' : (typeof v === 'number' ? (Number.isInteger(v) ? v : v.toFixed(4)) : v)
   // Top-100 (in-scope) rows first; out-of-scope collapsed to a count.
   const inRows = rows.filter((r) => inScope(r))
-  const outCount = rows.length - inRows.length
 
   if (inRows.length === 0) {
     return (
@@ -253,7 +273,6 @@ function PreviewTable({ columns, rows, showStatus = false, inScope = () => true 
           </tbody>
         </table>
       </div>
-      {outCount > 0 && <div className="px-3 py-1.5 text-xs text-muted-foreground bg-muted/30 border-t">{outCount} other part{outCount > 1 ? 's' : ''} not in Top-100 — excluded from output</div>}
     </div>
   )
 }

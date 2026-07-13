@@ -59,6 +59,32 @@ class ApiService {
     return (await res.json()).rows
   }
 
+  async pmmOptions() {
+    const res = await fetch(`${this.baseUrl}/api/pmm/options`, { headers: await this._headers() })
+    if (!res.ok) throw new Error(`PMM options failed (${res.status})`)
+    return res.json()
+  }
+
+  async pmmBasket(items, customerName, orderType = 'OE') {
+    const res = await fetch(`${this.baseUrl}/api/pmm/basket`, {
+      method: 'POST',
+      headers: await this._headers({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ items, customer_name: customerName, order_type: orderType }),
+    })
+    if (!res.ok) throw new Error(`PMM basket failed (${res.status})`)
+    return res.json()
+  }
+
+  async pmmPrice(req) {
+    const res = await fetch(`${this.baseUrl}/api/pmm/price`, {
+      method: 'POST',
+      headers: await this._headers({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(req),
+    })
+    if (!res.ok) throw new Error(`PMM price failed (${res.status})`)
+    return res.json()
+  }
+
   async exportRows(rows, filename = 'anillo_quote.xlsx') {
     const res = await fetch(`${this.baseUrl}/api/quotes/export`, {
       method: 'POST',
