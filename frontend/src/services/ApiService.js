@@ -75,6 +75,12 @@ class ApiService {
     return res.json()
   }
 
+  async pmmPartContext(part) {
+    const res = await fetch(`${this.baseUrl}/api/pmm/part-context/${encodeURIComponent(part)}`, { headers: await this._headers() })
+    if (!res.ok) throw new Error(`PMM part-context failed (${res.status})`)
+    return res.json()
+  }
+
   async pmmPrice(req) {
     const res = await fetch(`${this.baseUrl}/api/pmm/price`, {
       method: 'POST',

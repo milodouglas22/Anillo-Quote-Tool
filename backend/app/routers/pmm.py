@@ -27,7 +27,9 @@ async def options():
 @router.get("/part-context/{part}")
 async def part_context(part: str):
     ctx = pmm.part_context(part)
-    return asdict(ctx)
+    d = asdict(ctx)
+    d["supplier_dynamics"] = list(pmm.ci["alt_min_gm"].keys())  # for the maturity-framework selector
+    return d
 
 
 class PmmPriceRequest(BaseModel):
