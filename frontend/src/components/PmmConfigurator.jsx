@@ -81,9 +81,10 @@ export default function PmmConfigurator({ part, qtys, initial, onBack, onSave })
   )
   const shared = result?.shared
 
-  const Detail = ({ label, value }) => (
-    <div className="flex justify-between"><span className="text-primary">{label}:</span><span className="font-medium text-right max-w-[60%]">{value ?? '—'}</span></div>
-  )
+  const Detail = ({ label, value }) => {
+    const v = (value == null || value === '' || value === '—') ? 'Unknown' : value
+    return <div className="flex justify-between"><span className="text-primary">{label}:</span><span className="font-medium text-right max-w-[60%]">{v}</span></div>
+  }
 
   return (
     <div className="space-y-4">
