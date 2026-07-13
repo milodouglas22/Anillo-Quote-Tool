@@ -65,11 +65,11 @@ class ApiService {
     return res.json()
   }
 
-  async pmmBasket(items, customerName, orderType = 'OE') {
+  async pmmBasket(items, customerName, orderType = 'OE', customerType = null) {
     const res = await fetch(`${this.baseUrl}/api/pmm/basket`, {
       method: 'POST',
       headers: await this._headers({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ items, customer_name: customerName, order_type: orderType }),
+      body: JSON.stringify({ items, customer_name: customerName, order_type: orderType, customer_type: customerType }),
     })
     if (!res.ok) throw new Error(`PMM basket failed (${res.status})`)
     return res.json()

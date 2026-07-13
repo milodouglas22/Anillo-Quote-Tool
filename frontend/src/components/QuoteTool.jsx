@@ -65,14 +65,14 @@ export default function QuoteTool() {
           continue
         }
         if (!f.customer) continue
-        const sig = `${f.customer}|${f.rows.length}|${f.mapped}`
+        const sig = `${f.customer}|${f.customerType || ''}|${f.rows.length}|${f.mapped}`
         if (sig === f._sig) continue
         const k = 'price' + f.id; if (working.current.has(k)) continue; working.current.add(k)
         const topRows = f.rows.filter((r) => r['Part Number'] && isTop100(r['Part Number']))
         const pmmItems = f.rows.filter((r) => r['Part Number'] && !isTop100(r['Part Number'])).map((r) => ({ part: r['Part Number'], qtys: qtysOf(r) }))
         Promise.all([
           topRows.length ? api.priceRows(topRows, f.customer) : Promise.resolve([]),
-          pmmItems.length ? api.pmmBasket(pmmItems, f.customer, 'OE') : Promise.resolve({ items: [] }),
+          pmmItems.length ? api.pmmBasket(pmmItems, f.customer, 'OE', f.customerType || null) : Promise.resolve({ items: [] }),
         ]).then(([priced, basket]) => {
           const basketRows = []; const noData = []
           for (const it of (basket.items || [])) {
@@ -81,7 +81,7 @@ export default function QuoteTool() {
             it.prices.forEach((p, i) => { row[`Qty ${i + 1}`] = p.qty; row[`Price ${i + 1}`] = p.unit_price })
             basketRows.push(row)
           }
-          patch(f.id, { priced, basketRows, basketNoData: noData, _sig: sig })
+          patch(f.id, { priced, basketRows, basketNoData: noData, _sig: sig, customerType: f.customerType || basket.new_customer_type })
         }).catch((e) => patch(f.id, { error: e.message })).finally(() => working.current.delete(k))
       }
     }, 300)
@@ -89,7 +89,8 @@ export default function QuoteTool() {
   }, [files, isTop100, patch])
 
   const removeFile = (id) => setFiles((prev) => prev.filter((x) => x.id !== id))
-  const setCustomer = (id, customer) => patch(id, { customer, _sig: null, priced: null, basketRows: null })
+  const setCustomer = (id, customer) => patch(id, { customer, customerType: null, _sig: null, priced: null, basketRows: null })
+  const setCustomerType = (id, customerType) => patch(id, { customerType, _sig: null, priced: null, basketRows: null })
   const setMapping = (id, mapping) => patch(id, { mapping })
 
   // cart lines across files (with _key), applying overrides + removals
@@ -112,7 +113,8 @@ export default function QuoteTool() {
 
   const openConfigurator = (row) => {
     const [fileId] = row._key.split('|')
-    setSelected({ key: row._key, fileId, part: row['Part Number'], qtys: qtysOf(row), initial: overrides[row._key]?._config })
+    const f = files.find((x) => String(x.id) === fileId)
+    setSelected({ key: row._key, fileId, part: row['Part Number'], qtys: qtysOf(row), initial: overrides[row._key]?._config, customerType: f?.customerType || 'Distributor' })
     setShowCart(false)
   }
   const saveConfig = (row) => {
@@ -132,7 +134,7 @@ export default function QuoteTool() {
   // ---------- configurator view ----------
   if (selected) {
     return (
-      <PmmConfigurator part={selected.part} qtys={selected.qtys} initial={selected.initial}
+      <PmmConfigurator part={selected.part} qtys={selected.qtys} initial={selected.initial} customerType={selected.customerType}
         onBack={() => { setSelected(null); setShowCart(true) }} onSave={saveConfig} />
     )
   }
@@ -188,7 +190,16 @@ export default function QuoteTool() {
                   <div className="flex flex-wrap items-center gap-2">
                     <label className="text-sm font-medium flex items-center gap-1.5 shrink-0"><DollarSign className="h-4 w-4 text-primary" />Customer</label>
                     <input type="text" value={f.customer || ''} onChange={(e) => setCustomer(f.id, e.target.value)} placeholder="Who is this quote for? (e.g. Boeing, Incora)"
-                      className={cn('flex-1 min-w-[220px] px-3 py-1.5 border rounded-md text-sm bg-background', needCustomer && 'border-amber-400')} />
+                      className={cn('flex-1 min-w-[200px] px-3 py-1.5 border rounded-md text-sm bg-background', needCustomer && 'border-amber-400')} />
+                    {f.customer && (
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <label className="text-sm font-medium">Type</label>
+                        <select value={f.customerType || ''} onChange={(e) => setCustomerType(f.id, e.target.value)} className="px-2 py-1.5 border rounded-md text-sm bg-background">
+                          <option value="" disabled hidden>…</option>
+                          <option>OEM</option><option>Distributor</option><option>Tier</option>
+                        </select>
+                      </div>
+                    )}
                     {needCustomer && <span className="text-xs text-amber-600 dark:text-amber-400">Enter the customer to price.</span>}
                   </div>
 

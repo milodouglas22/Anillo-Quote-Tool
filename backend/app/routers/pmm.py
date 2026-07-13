@@ -94,6 +94,7 @@ class BasketRequest(BaseModel):
     items: list[BasketItem]
     customer_name: str = ""
     order_type: str = "OE"
+    customer_type: Optional[str] = None   # override; else looked up from customer_name
 
 
 @router.post("/basket")
@@ -103,7 +104,7 @@ async def basket(req: BasketRequest):
     the quote customer's type, and the given order type. The UI can then refine per item."""
     from ..services.pmm_pricing import norm_cust
     pmm.ensure_loaded()
-    new_ct = pmm.customers.get(norm_cust(req.customer_name), "Distributor")
+    new_ct = req.customer_type or pmm.customers.get(norm_cust(req.customer_name), "Distributor")
     out = []
     for it in req.items:
         ctx = pmm.part_context(it.part)

@@ -21,14 +21,13 @@ const datef = (v) => !v ? '—' : String(v).slice(0, 10)
  * Left: part details + order inputs (selections). Right: order history (pick reference row).
  * Bottom: computed quote + breakdown, Update Quote → writes the cart line.
  */
-export default function PmmConfigurator({ part, qtys, initial, onBack, onSave }) {
+export default function PmmConfigurator({ part, qtys, initial, customerType = 'Distributor', onBack, onSave }) {
   const [ctx, setCtx] = useState(null)
   const [loading, setLoading] = useState(true)
   const [pricing, setPricing] = useState(false)
   const [result, setResult] = useState(null)
   const [refIdx, setRefIdx] = useState(initial?.refIdx ?? 0)
   const [tradePosition, setTradePosition] = useState(initial?.trade_position || 'Strong Position')
-  const [customerType, setCustomerType] = useState(initial?.customer_type || 'Distributor')
   const [orderType, setOrderType] = useState(initial?.order_type || 'OE')
   const [supplierDynamic, setSupplierDynamic] = useState(initial?.supplier_dynamic || '')
 
@@ -138,9 +137,7 @@ export default function PmmConfigurator({ part, qtys, initial, onBack, onSave })
               )}
               <div>
                 <label className="block text-base font-medium mb-1">New Quote Customer Type</label>
-                <select value={customerType} onChange={(e) => setCustomerType(e.target.value)} className={inputCls}>
-                  <option>OEM</option><option>Distributor</option><option>Tier</option>
-                </select>
+                <div className="px-3 py-2 rounded-md border bg-muted/40 text-base">{customerType} <span className="text-xs text-muted-foreground">— set on the quote</span></div>
               </div>
               <div>
                 <label className="block text-base font-medium mb-1">Order Type</label>
