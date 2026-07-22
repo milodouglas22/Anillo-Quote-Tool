@@ -50,8 +50,23 @@ async def customer_suggest(q: str = "", limit: int = 12):
     needle = norm_cust(q)
     if not needle:
         return {"suggestions": []}
+    # normalized set of on-contract customer names, for tolerant matching
+    contract_norm = {norm_cust(name) for name in pricing.customers}
+
+    def contract_match(nc):
+        """Canonical on-contract name for nc, tolerating truncated/variant feed names
+        (exact, or prefix either direction, length-guarded) — same rule as the Price List.
+        Returns the matched normalized contract name, or None."""
+        if nc in contract_norm:
+            return nc
+        if len(nc) >= 8:
+            for k in contract_norm:
+                if k.startswith(nc) or nc.startswith(k):
+                    return k
+        return None
+
     seen: dict[str, dict] = {}
-    for name in pricing.customers:                       # contract customers
+    for name in pricing.customers:                       # contract customers (canonical)
         nc = norm_cust(name)
         seen[nc] = {"name": name, "family": family_of(name), "on_contract": True,
                     "type": pmm.customers.get(nc), "airbus_enabled": nc in pmm.airbus_enabled}
@@ -59,6 +74,12 @@ async def customer_suggest(q: str = "", limit: int = 12):
         nc = norm_cust(row["name"])
         if nc in seen:
             seen[nc]["type"] = seen[nc]["type"] or row["type"]
+            continue
+        # truncated/variant of a contract customer -> collapse into the canonical entry (don't
+        # list "BOEING COMMERCIAL AIRPLA" separately from "BOEING COMMERCIAL AIRPLANES")
+        canon = contract_match(nc)
+        if canon:
+            seen[canon]["type"] = seen[canon]["type"] or row["type"]
             continue
         seen[nc] = {"name": row["name"], "family": family_of(row["name"]), "on_contract": False,
                     "type": row["type"], "airbus_enabled": nc in pmm.airbus_enabled}
