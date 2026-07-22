@@ -55,30 +55,25 @@ export default function QuoteDrawer({
         )}
       </div>
 
-      <div className="shrink-0 border-t">
-        <div className="px-3 py-2.5">
-          <button onClick={onAddParts} disabled={!canAdd} title={canAdd ? undefined : 'Select customer and customer type first'}
-            className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-md border border-dashed border-primary/50 text-sm font-medium text-primary hover:bg-primary/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
-            <Plus className="w-4 h-4" /> Add part(s)
-          </button>
-        </div>
-
-        <div className="px-4 py-3 border-t space-y-2">
-          <button onClick={onPreview} disabled={items.length === 0}
-            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md border border-primary/50 text-sm font-medium text-primary hover:bg-primary/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
-            <Eye className="w-4 h-4" /> Preview quote
-          </button>
-          <button onClick={onExport} disabled={!canDownload || exporting}
-            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-md font-semibold text-primary-foreground bg-primary disabled:opacity-40 disabled:cursor-not-allowed transition-opacity">
-            {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-            Download quote
-          </button>
-          {items.length > 0 && (
-            <p className="mt-2 text-sm text-muted-foreground text-center">
-              {!customer ? 'Set the customer to price' : 'Only parts that have been re-priced will appear in the download'}
-            </p>
-          )}
-        </div>
+      <div className="shrink-0 border-t px-4 py-3 space-y-2">
+        <button onClick={onAddParts} disabled={!canAdd} title={canAdd ? undefined : 'Select customer and customer type first'}
+          className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md border border-dashed border-primary/50 text-sm font-semibold text-primary hover:bg-primary/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+          <Plus className="w-4 h-4" /> Add part(s)
+        </button>
+        <button onClick={onPreview} disabled={items.length === 0}
+          className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md border border-primary/50 text-sm font-semibold text-primary hover:bg-primary/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+          <Eye className="w-4 h-4" /> Preview quote
+        </button>
+        <button onClick={onExport} disabled={!canDownload || exporting}
+          className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-semibold text-primary-foreground bg-primary disabled:opacity-40 disabled:cursor-not-allowed transition-opacity">
+          {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+          Download quote
+        </button>
+        {items.length > 0 && (
+          <p className="mt-1 text-sm text-muted-foreground text-center">
+            {!customer ? 'Set the customer to price' : 'Only parts that have been re-priced will appear in the download'}
+          </p>
+        )}
       </div>
     </aside>
   )
