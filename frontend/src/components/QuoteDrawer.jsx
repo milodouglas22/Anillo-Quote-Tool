@@ -37,23 +37,25 @@ export default function QuoteDrawer({
             return (
               <div key={it.key}
                 onClick={() => onSelect(it.key)}
+                style={it.confirmed ? { backgroundColor: '#8BFFCB', borderColor: '#00A45A' } : undefined}
                 className={cn('group border rounded-lg px-3 py-2 cursor-pointer transition-colors',
-                  it.confirmed
-                    ? 'border-green-400 bg-green-50 dark:bg-green-950/40 dark:border-green-700'
-                    : (it.key === selectedKey ? 'border-primary ring-1 ring-primary bg-accent/10' : 'hover:border-primary/50 hover:bg-accent/5'))}>
+                  !it.confirmed && (it.key === selectedKey ? 'border-primary ring-1 ring-primary bg-accent/10' : 'hover:border-primary/50 hover:bg-accent/5'))}>
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    <div className="font-medium text-sm truncate text-foreground" title={it.part}>{it.part}</div>
+                    <div className={cn('font-medium text-sm truncate', it.confirmed ? 'text-gray-900' : 'text-foreground')} title={it.part}>{it.part}</div>
                     {!it.confirmed && (
                       <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
                         <span className={cn('px-2.5 py-1 rounded-md text-xs font-semibold', st.cls)}>{st.label}</span>
                       </div>
                     )}
                   </div>
-                  {it.confirmed && <CheckCircle2 className="w-7 h-7 text-green-600 dark:text-green-400 shrink-0" />}
+                  {it.confirmed && <CheckCircle2 className="w-7 h-7 shrink-0" style={{ color: '#00A45A' }} />}
                   <button
                     onClick={(e) => { e.stopPropagation(); onRemove(it.key) }}
-                    className="p-1 rounded hover:bg-destructive/10 shrink-0 opacity-60 group-hover:opacity-100 transition-opacity"
+                    className={cn('shrink-0 transition-opacity',
+                      it.confirmed
+                        ? 'p-1.5 rounded-md bg-white hover:bg-white/80'
+                        : 'p-1 rounded hover:bg-destructive/10 opacity-60 group-hover:opacity-100')}
                     title="Remove part">
                     <Trash2 className="w-4 h-4 text-destructive" />
                   </button>

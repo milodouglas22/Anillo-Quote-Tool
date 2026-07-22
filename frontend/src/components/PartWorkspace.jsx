@@ -156,7 +156,7 @@ export default function PartWorkspace({ item, customer, customerType, onUpdate }
     if (qty === '' || qty == null) return { qty }
     if (isContract) {
       const t = contractRow?._status?.tiers?.[i]
-      return { qty, unit_price: t?.price, caption: CONTRACT_RULE[t?.rule] }
+      return { qty, unit_price: t?.price, caption: t?.caption || CONTRACT_RULE[t?.rule] }
     }
     const p = (result?.prices || []).find((x) => Number(x.qty) === Number(qty))
     return { qty, unit_price: p?.unit_price, gross_margin: p?.gross_margin, caption: p?.governing_rule }

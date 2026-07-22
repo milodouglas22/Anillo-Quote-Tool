@@ -109,17 +109,25 @@ def _load_boeing_offer():
 
 
 def boeing_bucket_price(buckets, qty):
-    """Volume-matched Boeing bucket price: first bucket whose Max Bucket Quantity >= qty
-    (buckets ascending). Above all tiers -> the highest-volume (floor) price."""
+    """Volume-matched Boeing bucket. Returns (price, bucket_number, low_qty, high_qty);
+    high_qty is None for the open-ended top tier. Buckets ascending by Max Bucket Quantity."""
     if not buckets:
-        return None
+        return None, None, None, None
     q = qty if isinstance(qty, (int, float)) and qty > 0 else None
-    if q is None:
-        return buckets[-1][1]   # no qty -> floor
-    for max_qty, price in buckets:
-        if q <= max_qty:
-            return price
-    return buckets[-1][1]
+    prev = 0
+    for i, (max_qty, price) in enumerate(buckets):
+        if q is not None and q <= max_qty:
+            high = None if max_qty >= 9_999_999 else int(max_qty)
+            return price, i + 1, int(prev) + 1, high
+        prev = max_qty
+    # no qty, or beyond all tiers -> the highest-volume (floor) bucket
+    # find the first bucket at the floor price to report a stable bucket number
+    floor_price = buckets[-1][1]
+    for i, (max_qty, price) in enumerate(buckets):
+        if price == floor_price:
+            low = int(buckets[i - 1][0]) + 1 if i > 0 else 1
+            return floor_price, i + 1, low, None
+    return floor_price, len(buckets), 1, None
 
 
 @dataclass
@@ -131,6 +139,7 @@ class PriceResult:
     baseline: float | None = None
     matched_customer: str | None = None
     reason: str = ""
+    caption: str | None = None      # per-tier display caption (e.g. Boeing bucket + qty range)
 
 
 class PricingEngine:
@@ -239,10 +248,13 @@ class PricingEngine:
         # Boeing customer on a Boeing-offer part -> the bucket price for the ordered VOLUME
         # (NOT the Bucket-6 floor, which is only the anchor for non-contract markup).
         if fam == "Boeing" and pn in self.boeing_buckets:
-            bp = boeing_bucket_price(self.boeing_buckets[pn], q)
+            bp, bnum, low, high = boeing_bucket_price(self.boeing_buckets[pn], q)
             if bp is not None:
+                rng = f"{low:,}–{high:,} units" if high is not None else f"{low:,}+ units"
+                caption = f"Contract price for bucket {bnum} ({rng})"
                 return PriceResult(True, False, "contract", round(bp, 6), baseline=baseline,
-                                   matched_customer=customer, reason="Boeing bucket price (volume-matched)")
+                                   matched_customer=customer, reason="Boeing bucket price (volume-matched)",
+                                   caption=caption)
         # other on-contract customer -> the contract price
         cp = contract_price(self.contract.get(pn, {}), nc)
         if cp is None and fam == "Boeing" and pn in self.boeing:

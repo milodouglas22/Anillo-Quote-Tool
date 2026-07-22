@@ -135,7 +135,7 @@ async def price(req: PriceRequest):
                 out[f"Price {i}"] = pr.unit_price
                 rule_summary = rule_summary or pr.rule
                 max_priced = pr.unit_price if max_priced is None else max(max_priced, pr.unit_price)
-            tiers.append({"rule": pr.rule, "price": pr.unit_price, "reason": pr.reason})
+            tiers.append({"rule": pr.rule, "price": pr.unit_price, "reason": pr.reason, "caption": pr.caption})
         # anomaly guard: a contract price far above the part's own booking history is
         # almost certainly a part-number normalization collision — surface, don't ship.
         if row_scope and max_priced is not None:
