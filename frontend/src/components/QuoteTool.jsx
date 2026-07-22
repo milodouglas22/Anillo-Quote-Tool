@@ -253,7 +253,8 @@ export default function QuoteTool() {
               <button onClick={() => setAddOpen(false)} className="absolute right-4 p-1 rounded hover:bg-muted"><X className="h-4 w-4" /></button>
             </div>
             <div className="p-5">
-              <PartSearch autoFocus onPick={(p) => addParts([{ part: p.part, qtys: [], source: 'search' }])} />
+              <PartSearch autoFocus exclude={new Set(items.map((it) => normPart(it.part)))}
+                onPick={(p) => addParts([{ part: p.part, qtys: [], source: 'search' }])} />
             </div>
           </div>
         </div>

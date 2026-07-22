@@ -12,7 +12,7 @@ export const CATEGORY = {
 }
 
 /** Type-ahead search over every known part. onPick(partObj) adds it to the quote. */
-export default function PartSearch({ onPick, autoFocus = false, placeholder = 'Search for a part to quote…' }) {
+export default function PartSearch({ onPick, exclude, autoFocus = false, placeholder = 'Search for a part to quote…' }) {
   const [q, setQ] = useState('')
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(false)
@@ -39,6 +39,9 @@ export default function PartSearch({ onPick, autoFocus = false, placeholder = 'S
 
   const pick = (p) => { onPick(p); setQ(''); setResults([]); setOpen(false) }
 
+  // hide parts already in the quote
+  const shown = exclude ? results.filter((p) => !exclude.has(p.norm)) : results
+
   return (
     <div ref={boxRef} className="relative w-full">
       <div className="relative">
@@ -52,10 +55,10 @@ export default function PartSearch({ onPick, autoFocus = false, placeholder = 'S
 
       {open && (
         <div className="absolute z-30 mt-1 w-full max-h-72 overflow-y-auto rounded-lg border bg-popover shadow-lg">
-          {results.length === 0 ? (
+          {shown.length === 0 ? (
             <div className="px-3 py-3 text-sm text-muted-foreground">{loading ? 'Searching…' : 'No matching parts.'}</div>
           ) : (
-            results.map((p) => {
+            shown.map((p) => {
               const clean = (v) => v && !['unknown', 'n/a', 'none', 'other / unknown'].includes(String(v).trim().toLowerCase()) ? v : null
               const material = clean(p.material), finish = clean(p.finish)
               const cat = CATEGORY[p.category] || CATEGORY.unknown
