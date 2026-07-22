@@ -25,14 +25,17 @@ export default function QuoteDrawer({
         ) : (
           items.map((it) => {
             const noData = it.status === 'no_data'
+            const tinted = it.confirmed ? { backgroundColor: '#8BFFCB', borderColor: '#00A45A' }
+              : (!noData ? { backgroundColor: '#F8CBC4', borderColor: '#E1897E' } : undefined)
             return (
               <div key={it.key}
                 onClick={() => onSelect(it.key)}
-                style={it.confirmed ? { backgroundColor: '#8BFFCB', borderColor: '#00A45A' } : undefined}
+                style={tinted}
                 className={cn('group border rounded-lg px-3 py-2 cursor-pointer transition-colors',
-                  !it.confirmed && (it.key === selectedKey ? 'border-primary ring-1 ring-primary bg-accent/10' : 'hover:border-primary/50 hover:bg-accent/5'))}>
+                  it.key === selectedKey && 'ring-1 ring-primary',
+                  !tinted && (it.key === selectedKey ? 'border-primary bg-accent/10' : 'hover:border-primary/50 hover:bg-accent/5'))}>
                 <div className="flex items-center justify-between gap-2">
-                  <div className={cn('font-medium text-sm truncate min-w-0 flex-1', it.confirmed ? 'text-gray-900' : 'text-foreground')} title={it.part}>{it.part}</div>
+                  <div className={cn('font-medium text-sm truncate min-w-0 flex-1', tinted ? 'text-gray-900' : 'text-foreground')} title={it.part}>{it.part}</div>
                   {it.confirmed
                     ? <span className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold text-white" style={{ backgroundColor: '#00A45A' }}>
                         <Check className="w-3.5 h-3.5" /> Re-priced
@@ -44,7 +47,7 @@ export default function QuoteDrawer({
                   <button
                     onClick={(e) => { e.stopPropagation(); onRemove(it.key) }}
                     className={cn('shrink-0 transition-opacity',
-                      it.confirmed
+                      tinted
                         ? 'p-1.5 rounded-md bg-white hover:bg-white/80'
                         : 'p-1 rounded hover:bg-destructive/10 opacity-60 group-hover:opacity-100')}
                     title="Remove part">
