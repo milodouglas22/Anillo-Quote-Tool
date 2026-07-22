@@ -13,7 +13,7 @@ export default function QuoteDrawer({
     <aside className="flex flex-col h-full min-h-0 rounded-xl border bg-card">
       <div className="shrink-0 px-4 py-3 border-b">
         <h3 className="font-semibold text-primary text-center text-[1.05rem]">
-          Parts to quote {items.length > 0 && <span className="text-muted-foreground font-normal">({items.length})</span>}
+          Parts to quote
         </h3>
       </div>
 
@@ -32,18 +32,13 @@ export default function QuoteDrawer({
                 className={cn('group border rounded-lg px-3 py-2 cursor-pointer transition-colors',
                   !it.confirmed && (it.key === selectedKey ? 'border-primary ring-1 ring-primary bg-accent/10' : 'hover:border-primary/50 hover:bg-accent/5'))}>
                 <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className={cn('font-medium text-sm truncate', it.confirmed ? 'text-gray-900' : 'text-foreground')} title={it.part}>{it.part}</div>
-                    {!it.confirmed && (
-                      <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
-                        <span className={cn('px-2.5 py-1 rounded-md text-xs font-semibold',
-                          noData ? 'bg-muted text-muted-foreground' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200')}>
-                          {noData ? 'No pricing data' : 'Not priced'}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  {it.confirmed && <CheckCircle2 className="w-7 h-7 shrink-0" style={{ color: '#00A45A' }} />}
+                  <div className={cn('font-medium text-sm truncate min-w-0 flex-1', it.confirmed ? 'text-gray-900' : 'text-foreground')} title={it.part}>{it.part}</div>
+                  {it.confirmed
+                    ? <CheckCircle2 className="w-7 h-7 shrink-0" style={{ color: '#00A45A' }} />
+                    : <span className={cn('shrink-0 px-2.5 py-1 rounded-md text-xs font-semibold',
+                        noData ? 'bg-muted text-muted-foreground' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200')}>
+                        {noData ? 'No pricing data' : 'Not priced'}
+                      </span>}
                   <button
                     onClick={(e) => { e.stopPropagation(); onRemove(it.key) }}
                     className={cn('shrink-0 transition-opacity',

@@ -55,7 +55,7 @@ export default function QuoteTool() {
       seen.add(np)
       additions.push({
         key: newKey(), part: e.part, contract: isContract(e.part),
-        qtys: (e.qtys && e.qtys.length) ? e.qtys : [1000], source: e.source || 'search',
+        qtys: (e.qtys && e.qtys.length) ? e.qtys : [], source: e.source || 'search',
         row: null, config: null, status: 'needs_config', priceReady: false, anomaly: null, _sig: null,
       })
     }
@@ -253,7 +253,7 @@ export default function QuoteTool() {
               <button onClick={() => setAddOpen(false)} className="absolute right-4 p-1 rounded hover:bg-muted"><X className="h-4 w-4" /></button>
             </div>
             <div className="p-5">
-              <PartSearch autoFocus onPick={(p) => { addParts([{ part: p.part, qtys: [], source: 'search' }], { select: true }); setAddOpen(false) }} />
+              <PartSearch autoFocus onPick={(p) => addParts([{ part: p.part, qtys: [], source: 'search' }])} />
             </div>
           </div>
         </div>

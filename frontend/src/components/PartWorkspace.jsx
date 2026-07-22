@@ -44,7 +44,7 @@ export default function PartWorkspace({ item, customer, customerType, onUpdate }
   const [contractInfo, setContractInfo] = useState(null) // {contract_price, family} for price-list parts
 
   const [qtys, setQtys] = useState(() => (item.qtys?.length ? item.qtys.slice(0, 3) : []))
-  const [refIdx, setRefIdx] = useState(item.config?.refIdx ?? 0)
+  const [refIdx, setRefIdx] = useState(item.config?.refIdx ?? null)  // null = user hasn't picked a reference yet
   const [tradePosition, setTradePosition] = useState(item.config?.trade_position || '')
   const [orderType, setOrderType] = useState(item.config?.order_type || 'OE')
   const [supplierDynamic, setSupplierDynamic] = useState(item.config?.supplier_dynamic || '')
@@ -57,7 +57,7 @@ export default function PartWorkspace({ item, customer, customerType, onUpdate }
     let alive = true; setLoadingCtx(true); setCtx(null); setResult(null); setContractRow(null); setContractInfo(null)
     if (isContract) api.contractInfo(part).then((ci) => { if (alive) setContractInfo(ci) }).catch(() => {})
     setQtys(item.qtys?.length ? item.qtys.slice(0, 3) : [])
-    setRefIdx(item.config?.refIdx ?? 0)
+    setRefIdx(item.config?.refIdx ?? null)
     setTradePosition(item.config?.trade_position || '')
     setOrderType(item.config?.order_type || 'OE')
     setSupplierDynamic(item.config?.supplier_dynamic || '')
@@ -65,9 +65,9 @@ export default function PartWorkspace({ item, customer, customerType, onUpdate }
       if (!alive) return
       setCtx(c)
       if (!item.config && c.trade_position) setTradePosition(c.trade_position)
-      // default a quantity break so a price shows immediately (search-added parts have none)
-      if (!(item.qtys?.length)) setQtys([c.anchor_qty || 1000])
-    }).catch(() => { if (alive) { setCtx({ found: false }); if (!(item.qtys?.length)) setQtys([1000]) } }).finally(() => { if (alive) setLoadingCtx(false) })
+      // one empty break by default — the qty is a placeholder, entered in the pricing pane
+      if (!(item.qtys?.length)) setQtys([''])
+    }).catch(() => { if (alive) { setCtx({ found: false }); if (!(item.qtys?.length)) setQtys(['']) } }).finally(() => { if (alive) setLoadingCtx(false) })
     return () => { alive = false }
   }, [part]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -302,9 +302,10 @@ export default function PartWorkspace({ item, customer, customerType, onUpdate }
 
   // ===== PRICING PANE (A&D-style modal) — quantities adjusted here =====
   const pane = (
-    <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-[8vh]" onClick={() => setShowPane(false)}>
-      <div className="absolute inset-0 bg-black/40" />
-      <div className="relative bg-card rounded-xl shadow-xl w-full max-w-3xl max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-[8vh]">
+      {/* close only on a genuine backdrop click (a text-drag ending here bubbles to the wrapper, not this div) */}
+      <div className="absolute inset-0 bg-black/40" onClick={() => setShowPane(false)} />
+      <div className="relative bg-card rounded-xl shadow-xl w-full max-w-3xl max-h-[85vh] flex flex-col">
         <div className="shrink-0 flex items-center justify-between px-5 py-4 border-b">
           <h3 className="font-semibold text-primary flex items-center gap-2">
             <Calculator className="w-4 h-4" /> New pricing — <span className="font-bold">{part}</span>
@@ -331,7 +332,7 @@ export default function PartWorkspace({ item, customer, customerType, onUpdate }
                     </button>
                   )}
                   <div className="flex items-center justify-center gap-1">
-                    <input inputMode="numeric" value={qtyf(qtys[i])} onChange={(e) => setQty(i, e.target.value)} placeholder="Qty"
+                    <input inputMode="numeric" value={qtyf(qtys[i])} onChange={(e) => setQty(i, e.target.value)} placeholder="1,000"
                       className="w-24 text-center border rounded-md px-2 py-1 text-sm bg-background tabular-nums focus:outline-none focus:ring-2 focus:ring-ring" />
                     <span className="text-sm text-muted-foreground">units</span>
                   </div>
