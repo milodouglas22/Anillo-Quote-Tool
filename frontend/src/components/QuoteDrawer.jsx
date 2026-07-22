@@ -39,7 +39,7 @@ export default function QuoteDrawer({
                       </span>
                     : <span className={cn('shrink-0 px-2.5 py-1 rounded-md text-xs font-semibold',
                         noData ? 'bg-muted text-muted-foreground' : 'bg-red-600 text-white')}>
-                        {noData ? 'No pricing data' : 'Pending re-pricing'}
+                        {noData ? 'No pricing data' : 'To re-price'}
                       </span>}
                   <button
                     onClick={(e) => { e.stopPropagation(); onRemove(it.key) }}
