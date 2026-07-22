@@ -49,6 +49,26 @@ class ApiService {
     return (await res.json()).customers || []
   }
 
+  async contractInfo(part) {
+    const res = await fetch(`${this.baseUrl}/api/quotes/contract-info?part=${encodeURIComponent(part)}`, { headers: await this._headers() })
+    if (!res.ok) throw new Error(`Contract info failed (${res.status})`)
+    return res.json()
+  }
+
+  async customerSuggest(q, limit = 12) {
+    if (!q) return []
+    const res = await fetch(`${this.baseUrl}/api/quotes/customer-suggest?q=${encodeURIComponent(q)}&limit=${limit}`, { headers: await this._headers() })
+    if (!res.ok) throw new Error(`Customer suggest failed (${res.status})`)
+    return (await res.json()).suggestions || []
+  }
+
+  async searchParts(q, limit = 30) {
+    if (!q) return []
+    const res = await fetch(`${this.baseUrl}/api/quotes/search-parts?q=${encodeURIComponent(q)}&limit=${limit}`, { headers: await this._headers() })
+    if (!res.ok) throw new Error(`Part search failed (${res.status})`)
+    return (await res.json()).parts || []
+  }
+
   async priceRows(rows, customer) {
     const res = await fetch(`${this.baseUrl}/api/quotes/price`, {
       method: 'POST',

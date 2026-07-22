@@ -32,9 +32,33 @@ UNKNOWN_MATURITY = {"", "other / unknown", "unknown", "n/a"}
 MODEST_CRES = {"CRES", "HIGH TEMP CRES", "STAINLESS STEEL"}
 MODEST_ALU = {"ALUMINUM", "ALUMINUM ALLOY"}
 
+# Base part-number families explicitly designated Modest trade-brand position
+# (low-value hardware standards -> 40% GM floor instead of 70%). Matched on the
+# NORMALIZED (dashless, upper) part number, so a pattern like NAS1149F covers
+# NAS1149F-0863P etc. "XXXX" in the source spec = any trailing chars (a prefix match);
+# NAS1149D...H = starts NAS1149D and ends in H.
+MODEST_PART_PATTERNS = [
+    re.compile(p) for p in (
+        r"^NAS1146C",
+        r"^NAS1149F",
+        r"^MS20002",
+        r"^NAS620",
+        r"^MS15797",
+        r"^MS27183",
+        r"^NAS549",
+        r"^MS21299",
+        r"^NAS1149D.*H$",
+    )
+]
+
 
 def norm_part(s) -> str:
     return re.sub(r"[^A-Z0-9]", "", str(s or "").upper())
+
+
+def is_modest_part(norm_pn: str) -> bool:
+    """True if the normalized part number is on the Modest trade-brand list."""
+    return any(p.search(norm_pn) for p in MODEST_PART_PATTERNS)
 
 
 def norm_cust(s) -> str:
@@ -64,6 +88,8 @@ class PartContext:
     anchor_qty: int | None = None
     cost_per_unit: float | None = None
     reference_orders: list[dict] = field(default_factory=list)  # grouped by date+customer
+    shipments_2025: dict | None = None          # {units, value, asp, n} — 2025 EA shipments total
+    shipment_orders: list[dict] = field(default_factory=list)   # 2025 shipments grouped by date+customer
 
 
 @dataclass
@@ -99,6 +125,10 @@ class PMMEngine:
         self.customers: dict[str, str] = {}       # norm_cust -> type
         self.costs: dict[str, list] = defaultdict(list)  # norm_part -> [(date, norm_cust, unit_cost)]
         self.ci: dict = {}                        # control inputs
+        self.ship_2025: dict[str, dict] = {}      # norm_part -> {units, value, n} (2025 EA shipments)
+        self.ship_2025_rows: dict[str, list] = defaultdict(list)  # norm_part -> [{date, customer, qty, value}]
+        self.customer_rows: list[dict] = []       # [{name, type}] from Unique Customers (display names)
+        self.airbus_enabled: set[str] = set()     # norm_cust of Airbus-enabled suppliers
 
     # ------------------------------------------------------------------ #
     def ensure_loaded(self):
@@ -115,6 +145,57 @@ class PMMEngine:
         self._load_customers(wb)
         self._load_bookings(wb)
         self._load_costs(wb)
+        self._load_shipments_2025(wb)
+        self._load_airbus_enabled(wb)
+
+    def _load_airbus_enabled(self, wb):
+        if "Airbus Enabled Suppliers" not in wb.sheetnames:
+            return
+        ws = wb["Airbus Enabled Suppliers"]
+        it = ws.iter_rows(values_only=True)
+        next(it)  # header
+        for r in it:
+            if not r:
+                continue
+            for c in (r[0] if len(r) > 0 else None, r[1] if len(r) > 1 else None):
+                if c:
+                    self.airbus_enabled.add(norm_cust(c))
+
+    def _load_shipments_2025(self, wb):
+        # "Shipped 2015-2025" sheet: total 2025 shipments per part. Units = quanleft (col 12,
+        # the true shipped qty — NOT the cumulative 'quantity' col 9), filtered to UoM == EA
+        # (col 8). Value = quanleft × unit price (col 7). Year from ship date (col 4), falling
+        # back to Year Invoiced (col 23) when the ship date is blank.
+        if "Shipped 2015-2025" not in wb.sheetnames:
+            return
+        ws = wb["Shipped 2015-2025"]
+        it = ws.iter_rows(values_only=True)
+        next(it)  # header
+        agg = self.ship_2025
+        for r in it:
+            if not r or r[0] is None:
+                continue
+            shipped = r[4] if len(r) > 4 else None
+            yr = getattr(shipped, "year", None)
+            if yr is None and len(r) > 23 and isinstance(r[23], (int, float)):
+                yr = int(r[23])
+            if yr != 2025:
+                continue
+            if str(r[8] or "").strip().upper() != "EA":
+                continue
+            ql = r[12] if len(r) > 12 and isinstance(r[12], (int, float)) else None
+            if ql is None or ql <= 0:
+                continue
+            up = r[7] if len(r) > 7 and isinstance(r[7], (int, float)) else 0
+            pn = norm_part(r[0])
+            g = agg.get(pn)
+            if g is None:
+                g = agg[pn] = {"units": 0.0, "value": 0.0, "n": 0}
+            g["units"] += ql
+            g["value"] += ql * (up or 0)
+            g["n"] += 1
+            self.ship_2025_rows[pn].append({"date": shipped, "customer": str(r[2]).strip() if r[2] else "",
+                                            "qty": ql, "value": ql * (up or 0)})
 
     def _load_control_inputs(self, wb):
         ws = wb["Control Inputs"]
@@ -166,7 +247,9 @@ class PMMEngine:
         next(it)  # header
         for r in it:
             if r and r[0]:
-                self.customers[norm_cust(r[0])] = str(r[2]).strip() if len(r) > 2 and r[2] else "Unknown"
+                typ = str(r[2]).strip() if len(r) > 2 and r[2] else "Unknown"
+                self.customers[norm_cust(r[0])] = typ
+                self.customer_rows.append({"name": str(r[0]).strip(), "type": typ})
 
     def _load_bookings(self, wb):
         ws = wb["Bookings History"]
@@ -210,9 +293,12 @@ class PMMEngine:
             self.costs[norm_part(r[5])].append((r[0], norm_cust(r[4]), uc))
 
     # ------------------------------------------------------------------ #
-    def _derive_trade_position(self, maturity, material, finish):
+    def _derive_trade_position(self, maturity, material, finish, part_norm=""):
         if str(maturity or "").strip().lower() not in UNKNOWN_MATURITY:
             return "N/A - Known Platform"
+        # explicit modest-part list wins over the material/finish heuristic
+        if part_norm and is_modest_part(part_norm):
+            return "Modest Position"
         mat = str(material or "").strip().upper()
         fin = str(finish or "").strip().upper()
         if (mat in MODEST_CRES and fin == "PASSIVATED") or (mat in MODEST_ALU and fin == "NONE"):
@@ -229,14 +315,71 @@ class PMMEngine:
         pick = sorted(pick, key=lambda x: (x[0] is not None, x[0]))
         return pick[-1][2] if pick else None
 
-    def part_context(self, part: str) -> PartContext:
+    def booking_asp_max(self, part: str):
+        """Highest per-line ASP ever booked for this part (anomaly-guard reference).
+        Returns None if the part has no booking history."""
+        self.ensure_loaded()
+        g = self.parts.get(norm_part(part))
+        if not g:
+            return None
+        asps = [o["unit_price"] for o in g["orders"]
+                if isinstance(o["unit_price"], (int, float)) and o["unit_price"] > 0]
+        return max(asps) if asps else None
+
+    def classify(self, part: str):
+        """Pricing category for a non-contract part:
+        'platform_maturity' (known platform) | 'modest_trade_brand' | 'strong_trade_brand'.
+        Returns None if the part has no booking history to classify from."""
         self.ensure_loaded()
         pn = norm_part(part)
         g = self.parts.get(pn)
         if not g:
-            return PartContext(part=part, found=False)
+            return None
         maturity = g["maturity"]
-        tp = self._derive_trade_position(maturity, g["material"], g["finish"])
+        if str(maturity or "").strip().lower() not in UNKNOWN_MATURITY:
+            return "platform_maturity"
+        tp = self._derive_trade_position(maturity, g["material"], g["finish"], pn)
+        return "modest_trade_brand" if tp == "Modest Position" else "strong_trade_brand"
+
+    def _shipments_2025(self, pn: str):
+        s = self.ship_2025.get(pn)
+        if not s or s["units"] <= 0:
+            return None
+        return {"units": round(s["units"]), "value": round(s["value"], 2),
+                "asp": round(s["value"] / s["units"], 6) if s["value"] else None, "n": s["n"]}
+
+    def _shipment_orders(self, pn: str):
+        """2025 shipments grouped by (date, customer) -> value-weighted unit price,
+        same shape as booking reference_orders so the UI can render one shared table."""
+        rows = self.ship_2025_rows.get(pn)
+        if not rows:
+            return []
+        grp = {}
+        for o in rows:
+            key = (str(o["date"]), o["customer"])
+            e = grp.setdefault(key, {"qty": 0.0, "value": 0.0, "customer": o["customer"], "date": o["date"]})
+            e["qty"] += o["qty"] or 0
+            e["value"] += o["value"] or 0
+        out = []
+        for e in grp.values():
+            if e["qty"] > 0:
+                out.append({"date": (e["date"].isoformat() if hasattr(e["date"], "isoformat") else str(e["date"])),
+                            "customer": e["customer"], "qty": int(e["qty"]),
+                            "unit_price": round(e["value"] / e["qty"], 6) if e["value"] else None,
+                            "customer_type": self.customers.get(norm_cust(e["customer"]), "Unknown")})
+        out.sort(key=lambda x: x["date"], reverse=True)
+        return out
+
+    def part_context(self, part: str) -> PartContext:
+        self.ensure_loaded()
+        pn = norm_part(part)
+        ship = self._shipments_2025(pn)
+        ship_orders = self._shipment_orders(pn)
+        g = self.parts.get(pn)
+        if not g:
+            return PartContext(part=part, found=False, shipments_2025=ship, shipment_orders=ship_orders)
+        maturity = g["maturity"]
+        tp = self._derive_trade_position(maturity, g["material"], g["finish"], pn)
         framework = ("Trade Brand Strategy"
                      if str(maturity or "").strip().lower() in UNKNOWN_MATURITY
                      else "Platform Maturity Strategy")
@@ -266,7 +409,8 @@ class PMMEngine:
         return PartContext(
             part=g["orig"], found=True, uom=g["uom"], material=g["material"], finish=g["finish"],
             platform=g["platform"], maturity=maturity or "Unknown", trade_position=tp, framework=framework,
-            anchor_qty=anchor, cost_per_unit=cost, reference_orders=refs,
+            anchor_qty=anchor, cost_per_unit=cost, reference_orders=refs, shipments_2025=ship,
+            shipment_orders=ship_orders,
         )
 
     def _min_gm(self, ctx: PartContext, supplier_dynamic: str | None) -> float | None:

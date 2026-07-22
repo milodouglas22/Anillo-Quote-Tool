@@ -1,0 +1,96 @@
+import { Trash2, Download, Loader2, Plus, AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
+
+const STATUS = {
+  quoted:        { cls: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200', label: 'Quoted' },
+  contract:      { cls: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200', label: 'Price list' },
+  needs_config:  { cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200', label: 'Review' },
+  flagged:       { cls: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200', label: 'Flagged' },
+  no_data:       { cls: 'bg-muted text-muted-foreground', label: 'No data' },
+  needs_customer:{ cls: 'bg-muted text-muted-foreground', label: 'Set customer' },
+}
+
+/** Persistent right-hand quote drawer: the list of parts to quote + pinned Download. */
+export default function QuoteDrawer({
+  items, selectedKey, onSelect, onRemove, onAddParts, canAdd = true, onExport, exporting, customer,
+}) {
+  // a line counts only once the user has confirmed it via "Add to quote" in the pricing pane
+  const blocking = items.filter((it) => !it.confirmed)
+  const canDownload = items.length > 0 && blocking.length === 0 && !!customer
+
+  return (
+    <aside className="flex flex-col h-full min-h-0 rounded-xl border bg-card">
+      <div className="shrink-0 px-4 py-3 border-b">
+        <h3 className="font-semibold text-primary text-center text-[1.05rem]">
+          Parts to quote {items.length > 0 && <span className="text-muted-foreground font-normal">({items.length})</span>}
+        </h3>
+      </div>
+
+      <div className="flex-1 overflow-y-auto min-h-0 px-3 py-3 space-y-2">
+        {items.length === 0 ? (
+          <div className="h-full flex items-center justify-center text-center text-sm text-muted-foreground px-4 py-10">
+            Parts to quote will appear here.
+          </div>
+        ) : (
+          items.map((it) => {
+            const st = STATUS[it.status] || STATUS.needs_config
+            return (
+              <div key={it.key}
+                onClick={() => onSelect(it.key)}
+                className={cn('group border rounded-lg px-3 py-2 cursor-pointer transition-colors',
+                  it.confirmed
+                    ? 'border-green-400 bg-green-50 dark:bg-green-950/40 dark:border-green-700'
+                    : (it.key === selectedKey ? 'border-primary ring-1 ring-primary bg-accent/10' : 'hover:border-primary/50 hover:bg-accent/5'))}>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-sm truncate text-foreground" title={it.part}>{it.part}</div>
+                    {!it.confirmed && (
+                      <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                        <span className={cn('px-2.5 py-1 rounded-md text-xs font-semibold', st.cls)}>{st.label}</span>
+                      </div>
+                    )}
+                  </div>
+                  {it.confirmed && <CheckCircle2 className="w-7 h-7 text-green-600 dark:text-green-400 shrink-0" />}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onRemove(it.key) }}
+                    className="p-1 rounded hover:bg-destructive/10 shrink-0 opacity-60 group-hover:opacity-100 transition-opacity"
+                    title="Remove part">
+                    <Trash2 className="w-4 h-4 text-destructive" />
+                  </button>
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
+
+      <div className="shrink-0 border-t">
+        <div className="px-3 py-2.5">
+          <button onClick={onAddParts} disabled={!canAdd} title={canAdd ? undefined : 'Select customer and customer type first'}
+            className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-md border border-dashed border-primary/50 text-sm font-medium text-primary hover:bg-primary/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+            <Plus className="w-4 h-4" /> Add part(s)
+          </button>
+        </div>
+
+        {blocking.length > 0 && (
+          <div className="px-4 py-2 text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 flex items-center gap-1.5 border-t">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {blocking.length} part{blocking.length > 1 ? 's' : ''} not yet added to quote.
+          </div>
+        )}
+
+        <div className="px-4 py-3 border-t">
+          <button onClick={onExport} disabled={!canDownload || exporting}
+            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-md font-semibold text-primary-foreground bg-primary disabled:opacity-40 disabled:cursor-not-allowed transition-opacity">
+            {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : canDownload ? <CheckCircle2 className="w-4 h-4" /> : <Download className="w-4 h-4" />}
+            Download quote
+          </button>
+          {!canDownload && items.length > 0 && (
+            <p className="mt-1.5 text-[11px] text-muted-foreground text-center">
+              {!customer ? 'Set the customer to price.' : 'Add every part to the quote to enable download.'}
+            </p>
+          )}
+        </div>
+      </div>
+    </aside>
+  )
+}

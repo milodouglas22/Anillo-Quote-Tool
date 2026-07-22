@@ -1,40 +1,72 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { Upload, FileSpreadsheet, FileText, AlertTriangle, X, Loader2, ShoppingCart, DollarSign } from 'lucide-react'
+import { Upload, FileSpreadsheet, AlertTriangle, X, Loader2, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import api from '@/services/ApiService'
 import ColumnMapper from '@/components/ColumnMapper'
-import QuoteCart from '@/components/QuoteCart'
-import PmmConfigurator from '@/components/PmmConfigurator'
+import PartSearch from '@/components/PartSearch'
+import CustomerInput from '@/components/CustomerInput'
+import PartWorkspace from '@/components/PartWorkspace'
+import QuoteDrawer from '@/components/QuoteDrawer'
 
-const REPLY_FALLBACK = ['Part Number','Qty 1','Price 1','Qty 2','Price 2','Qty 3','Price 3','L/T','MFG','REV']
-const FORMAT_LABELS = { adept: 'ADEPT', incora: 'Incora', boeing_sap: 'Boeing (SAP)', boeing_pdf: 'Boeing (PDF)', unknown: 'Unrecognized' }
+const REPLY_FALLBACK = ['Part Number', 'Qty 1', 'Price 1', 'Qty 2', 'Price 2', 'Qty 3', 'Price 3', 'L/T', 'MFG', 'REV']
 const normPart = (s) => String(s ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
 const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
-const qtysOf = (row) => ['Qty 1','Qty 2','Qty 3'].map((k) => row[k]).filter((q) => q !== null && q !== '' && q !== undefined).map(Number)
+const qtysOf = (row) => ['Qty 1', 'Qty 2', 'Qty 3'].map((k) => row[k]).filter((q) => q !== null && q !== '' && q !== undefined).map(Number)
 let _uid = 0
+// Globally-unique key, immune to HMR resetting the counter (which caused duplicate keys → multi-select).
+const newKey = () => (globalThis.crypto?.randomUUID?.() ?? `p${Date.now().toString(36)}_${++_uid}`)
 
 export default function QuoteTool() {
   const [replyColumns, setReplyColumns] = useState(REPLY_FALLBACK)
   const [topSet, setTopSet] = useState(null)
-  const [files, setFiles] = useState([])
+  const [customer, setCustomer] = useState('')
+  const [customerType, setCustomerType] = useState('')
+  const [items, setItems] = useState([])
+  const [selectedKey, setSelectedKey] = useState(null)
+  const [priceNonce, setPriceNonce] = useState(0)
+  const [mapper, setMapper] = useState(null)          // { filename, raw_records, source_columns, sample_data, suggestions, mapping, customer_guess }
+  const [addOpen, setAddOpen] = useState(false)       // "Add part(s)" search popup
+  const [uploading, setUploading] = useState(false)
   const [dragActive, setDragActive] = useState(false)
   const [exporting, setExporting] = useState(false)
-  const [showCart, setShowCart] = useState(false)
-  const [selected, setSelected] = useState(null)     // { key, fileId, part, qtys, initial }
-  const [overrides, setOverrides] = useState({})      // key -> configured reply row
-  const [removed, setRemoved] = useState({})          // key -> true
   const inputRef = useRef(null)
-  const working = useRef(new Set())
+
+  const itemsRef = useRef(items); itemsRef.current = items
+  const selectedRef = useRef(selectedKey); selectedRef.current = selectedKey
+  const working = useRef(false)
 
   useEffect(() => {
     fetch(`${API}/api/quotes/reply-columns`).then((r) => r.ok ? r.json() : null).then((d) => d?.columns && setReplyColumns(d.columns)).catch(() => {})
     fetch(`${API}/api/quotes/top-parts`).then((r) => r.ok ? r.json() : null).then((d) => d?.parts && setTopSet(new Set(d.parts))).catch(() => {})
   }, [])
 
-  const patch = useCallback((id, obj) => setFiles((prev) => prev.map((f) => f.id === id ? { ...f, ...obj } : f)), [])
-  const isTop100 = useCallback((pn) => topSet ? topSet.has(normPart(pn)) : false, [topSet])
+  const isContract = useCallback((pn) => topSet ? topSet.has(normPart(pn)) : false, [topSet])
+
+  // ---------- add parts ----------
+  const addParts = useCallback((entries, { select = false } = {}) => {
+    // entries: [{ part, qtys, source }]. Dedupe against current items; build additions once
+    // (outside the state updater) so keys are stable and unique.
+    const seen = new Set(itemsRef.current.map((it) => normPart(it.part)))
+    const additions = []
+    for (const e of entries) {
+      const np = normPart(e.part)
+      if (!np || seen.has(np)) continue
+      seen.add(np)
+      additions.push({
+        key: newKey(), part: e.part, contract: isContract(e.part),
+        qtys: (e.qtys && e.qtys.length) ? e.qtys : [1000], source: e.source || 'search',
+        row: null, config: null, status: 'needs_config', priceReady: false, anomaly: null, _sig: null,
+      })
+    }
+    if (!additions.length) return
+    setItems((prev) => [...prev, ...additions])
+    if (select) setSelectedKey(additions[additions.length - 1].key)
+    setPriceNonce((n) => n + 1)
+  }, [isContract])
+
+  const rowsToEntries = (rows) => rows.filter((r) => r['Part Number']).map((r) => ({ part: r['Part Number'], qtys: qtysOf(r), source: 'upload' }))
+
   const initMapping = useCallback((sugg, cols) => {
     const map = {}; const used = new Set()
     for (const rc of cols) { const b = (sugg?.[rc] || []).find((s) => s.score >= 0.5 && !used.has(s.source_col)); if (b) { map[rc] = b.source_col; used.add(b.source_col) } else map[rc] = null }
@@ -43,186 +75,215 @@ export default function QuoteTool() {
 
   const handleFiles = useCallback(async (fileList) => {
     for (const file of Array.from(fileList)) {
-      const id = ++_uid
-      setFiles((prev) => [...prev, { id, filename: file.name, busy: true, customer: '' }])
+      setUploading(true)
       try {
         const res = await api.processFile(file)
-        patch(id, { busy: false, ...res, mapping: res.recognized ? null : initMapping(res.suggestions, res.reply_columns || replyColumns), customer: res.customer_guess || '' })
-      } catch (e) { patch(id, { busy: false, error: e.message }) }
-    }
-  }, [replyColumns, initMapping, patch])
-
-  // auto: top-100 contract pricing + PMM basket defaults per file
-  useEffect(() => {
-    const t = setTimeout(() => {
-      for (const f of files) {
-        if (f.busy || f.error || !(f.recognized || f.mapped) || !f.rows?.length) continue
-        // unknown-format mapping auto-apply
-        if (f.detected_format === 'unknown' && f.mapping?.['Part Number'] && JSON.stringify(f.mapping) !== f._mapSig) {
-          const k = 'map' + f.id; if (working.current.has(k)) continue; working.current.add(k)
-          const sig = JSON.stringify(f.mapping)
-          api.applyMapping(f.raw_records, f.mapping).then((r) => patch(f.id, { rows: r.rows, mapped: true, _mapSig: sig, _sig: null })).catch((e) => patch(f.id, { error: e.message })).finally(() => working.current.delete(k))
-          continue
+        if (res.customer_guess && !customer) setCustomer(res.customer_guess)
+        if (res.recognized && res.rows?.length) {
+          addParts(rowsToEntries(res.rows))
+        } else {
+          // unknown format → open the column mapper
+          setMapper({ ...res, filename: file.name, mapping: initMapping(res.suggestions, res.reply_columns || replyColumns) })
         }
-        if (!f.customer) continue
-        const sig = `${f.customer}|${f.customerType || ''}|${f.rows.length}|${f.mapped}`
-        if (sig === f._sig) continue
-        const k = 'price' + f.id; if (working.current.has(k)) continue; working.current.add(k)
-        const topRows = f.rows.filter((r) => r['Part Number'] && isTop100(r['Part Number']))
-        const pmmItems = f.rows.filter((r) => r['Part Number'] && !isTop100(r['Part Number'])).map((r) => ({ part: r['Part Number'], qtys: qtysOf(r) }))
-        Promise.all([
-          topRows.length ? api.priceRows(topRows, f.customer) : Promise.resolve([]),
-          pmmItems.length ? api.pmmBasket(pmmItems, f.customer, 'OE', f.customerType || null) : Promise.resolve({ items: [] }),
-        ]).then(([priced, basket]) => {
-          const basketRows = []; const noData = []
-          for (const it of (basket.items || [])) {
-            if (!it.found || !it.prices?.length) { noData.push(it.part); continue }
-            const row = { 'Part Number': it.part, _pmm: { framework: it.framework, trade: it.trade_position, gov: it.prices[0]?.governing_rule, gm: it.prices[0]?.gross_margin, cost: it.cost_per_unit } }
-            it.prices.forEach((p, i) => { row[`Qty ${i + 1}`] = p.qty; row[`Price ${i + 1}`] = p.unit_price })
-            basketRows.push(row)
-          }
-          patch(f.id, { priced, basketRows, basketNoData: noData, _sig: sig, customerType: f.customerType || basket.new_customer_type })
-        }).catch((e) => patch(f.id, { error: e.message })).finally(() => working.current.delete(k))
-      }
-    }, 300)
-    return () => clearTimeout(t)
-  }, [files, isTop100, patch])
-
-  const removeFile = (id) => setFiles((prev) => prev.filter((x) => x.id !== id))
-  const setCustomer = (id, customer) => patch(id, { customer, customerType: null, _sig: null, priced: null, basketRows: null })
-  const setCustomerType = (id, customerType) => patch(id, { customerType, _sig: null, priced: null, basketRows: null })
-  const setMapping = (id, mapping) => patch(id, { mapping })
-
-  // cart lines across files (with _key), applying overrides + removals
-  const cartLines = useMemo(() => {
-    const out = []
-    for (const f of files) {
-      if (!f.rows) continue
-      for (const r of (f.priced || []).filter((x) => x._status?.in_scope !== false)) {
-        const key = `${f.id}|${r['Part Number']}`
-        if (!removed[key]) out.push({ ...r, _key: key })
-      }
-      for (const r of (f.basketRows || [])) {
-        const key = `${f.id}|${r['Part Number']}`
-        if (removed[key]) continue
-        out.push(overrides[key] ? { ...overrides[key], _key: key, _repriced: true } : { ...r, _key: key })
-      }
+      } catch (e) { alert(`Could not read ${file.name}: ${e.message}`) } finally { setUploading(false) }
     }
-    return out
-  }, [files, overrides, removed])
+  }, [customer, addParts, initMapping, replyColumns])
 
-  const openConfigurator = (row) => {
-    const [fileId] = row._key.split('|')
-    const f = files.find((x) => String(x.id) === fileId)
-    setSelected({ key: row._key, fileId, part: row['Part Number'], qtys: qtysOf(row), initial: overrides[row._key]?._config, customerType: f?.customerType || 'Distributor' })
-    setShowCart(false)
-  }
-  const saveConfig = (row) => {
-    setOverrides((o) => ({ ...o, [selected.key]: row }))
-    setSelected(null); setShowCart(true)
-  }
-  const removeLine = (key) => setRemoved((r) => ({ ...r, [key]: true }))
-  const clearAll = () => { setFiles([]); setOverrides({}); setRemoved({}); setShowCart(false) }
+  const confirmMapping = useCallback(async () => {
+    if (!mapper?.mapping?.['Part Number']) return
+    try {
+      const r = await api.applyMapping(mapper.raw_records, mapper.mapping)
+      if (mapper.customer_guess && !customer) setCustomer(mapper.customer_guess)
+      addParts(rowsToEntries(r.rows))
+      setMapper(null)
+    } catch (e) { alert(e.message) }
+  }, [mapper, customer, addParts])
+
+  // ---------- centralized (batch) pricing for unopened items ----------
+  useEffect(() => {
+    if (!customer || working.current) return
+    const sig = `${customer}|${customerType || ''}`
+    const todo = itemsRef.current.filter((it) => it._sig !== sig && it.key !== selectedRef.current && it.qtys?.length)
+    if (!todo.length) return
+    working.current = true
+    const contract = todo.filter((it) => it.contract)
+    const pmm = todo.filter((it) => !it.contract)
+
+    const jobs = []
+    if (contract.length) {
+      const rows = contract.map((it) => { const row = { 'Part Number': it.part, _key: it.key }; it.qtys.forEach((q, i) => { row[`Qty ${i + 1}`] = q }); return row })
+      jobs.push(api.priceRows(rows, customer).then((priced) => ({ kind: 'contract', priced })).catch(() => ({ kind: 'contract', priced: [] })))
+    }
+    if (pmm.length) {
+      const basketItems = pmm.map((it) => ({ part: it.part, qtys: it.qtys }))
+      jobs.push(api.pmmBasket(basketItems, customer, 'OE', customerType || null).then((b) => ({ kind: 'pmm', b })).catch(() => ({ kind: 'pmm', b: { items: [] } })))
+    }
+
+    Promise.all(jobs).then((res) => {
+      setItems((prev) => prev.map((it) => {
+        if (it._sig === sig || it.key === selectedRef.current || !it.qtys?.length) return it
+        if (it.contract) {
+          const r = res.find((x) => x.kind === 'contract')?.priced?.find((p) => p._key === it.key)
+          if (!r) return it
+          const st = r._status
+          return { ...it, row: r, _sig: sig, anomaly: st?.anomaly || null,
+            priceReady: r['Price 1'] != null && st?.in_scope !== false,
+            status: st?.anomaly ? 'flagged' : (st?.in_scope === false ? 'no_data' : 'contract') }
+        } else {
+          const b = res.find((x) => x.kind === 'pmm')?.b
+          const bi = (b?.items || []).find((x) => normPart(x.part) === normPart(it.part))
+          if (!bi) return it
+          if (!bi.found || !bi.prices?.length) return { ...it, _sig: sig, status: 'no_data', priceReady: false }
+          const row = { 'Part Number': it.part, _pmm: { framework: bi.framework, trade: bi.trade_position, gov: bi.prices[0]?.governing_rule, gm: bi.prices[0]?.gross_margin, cost: bi.cost_per_unit } }
+          bi.prices.forEach((p, i) => { row[`Qty ${i + 1}`] = p.qty; row[`Price ${i + 1}`] = p.unit_price })
+          return { ...it, row, _sig: sig, status: 'quoted', priceReady: true, customerTypeResolved: bi.new_customer_type }
+        }
+      }))
+    }).finally(() => { working.current = false; setPriceNonce((n) => n + 1) })
+  }, [customer, customerType, priceNonce])
+
+  // when customer/type changes, invalidate prices so the batch reprices everything
+  const changeCustomer = (v) => { setCustomer(v); setItems((prev) => prev.map((it) => ({ ...it, _sig: null }))); setPriceNonce((n) => n + 1) }
+  const changeCustomerType = (v) => { setCustomerType(v); setItems((prev) => prev.map((it) => ({ ...it, _sig: null }))); setPriceNonce((n) => n + 1) }
+
+  // ---------- item updates from the workspace ----------
+  const updateItem = useCallback((key, patch) => {
+    const sig = `${customer}|${customerType || ''}`
+    setItems((prev) => prev.map((it) => it.key === key ? { ...it, ...patch, _sig: sig } : it))
+  }, [customer, customerType])
+
+  const removeItem = (key) => setItems((prev) => {
+    const next = prev.filter((it) => it.key !== key)
+    if (key === selectedRef.current) setSelectedKey(null)
+    return next
+  })
+
+  const selected = items.find((it) => it.key === selectedKey) || null
+
+  // self-heal: never let selectedKey dangle (would desync the workspace vs the drawer)
+  useEffect(() => {
+    if (selectedKey && !items.some((it) => it.key === selectedKey)) setSelectedKey(null)
+  }, [items, selectedKey])
+
+  // ---------- export ----------
+  const totals = useMemo(() => {
+    let units = 0, rev = 0
+    for (const it of items) { const q = Number(it.row?.['Qty 1']) || 0; const p = Number(it.row?.['Price 1']) || 0; units += q; rev += q * p }
+    return { units, rev }
+  }, [items])
 
   const doExport = async () => {
+    const rows = items.filter((it) => it.confirmed && it.row).map((it) => {
+      const { _key, ...clean } = it.row; return clean
+    })
+    if (!rows.length) return
     setExporting(true)
-    try { await api.exportRows(cartLines, 'anillo_quote.xlsx') } catch (e) { alert(e.message) } finally { setExporting(false) }
+    try { await api.exportRows(rows, 'anillo_quote.xlsx') } catch (e) { alert(e.message) } finally { setExporting(false) }
   }
 
-  const onDrop = (e) => { e.preventDefault(); setDragActive(false); if (e.dataTransfer.files?.length) handleFiles(e.dataTransfer.files) }
+  const ready = Boolean(customer && customerType)   // customer + type must be set before adding parts
+  const onDrop = (e) => { e.preventDefault(); setDragActive(false); if (ready && e.dataTransfer.files?.length) handleFiles(e.dataTransfer.files) }
 
-  // ---------- configurator view ----------
-  if (selected) {
-    return (
-      <PmmConfigurator part={selected.part} qtys={selected.qtys} initial={selected.initial} customerType={selected.customerType}
-        onBack={() => { setSelected(null); setShowCart(true) }} onSave={saveConfig} />
-    )
-  }
-
+  // ================= render =================
   return (
-    <div className="space-y-5">
-      {/* top bar */}
-      <div className="flex items-center justify-end">
-        <Button variant={cartLines.length ? 'default' : 'outline'} onClick={() => setShowCart(true)} disabled={!cartLines.length}>
-          <ShoppingCart className="h-4 w-4 mr-1.5" /> Quote ({cartLines.length})
-        </Button>
+    <div className="flex flex-col" style={{ height: 'calc(100vh - 8.5rem)' }}>
+      {/* customer bar */}
+      <div className="shrink-0 flex flex-wrap items-center justify-center gap-3 pb-3 mb-3 border-b">
+        <label className="text-sm font-medium text-primary">Quote for</label>
+        <CustomerInput value={customer} invalid={!customer}
+          onChange={changeCustomer}
+          onPick={(name, type) => { changeCustomer(name); if (['OEM', 'Distributor', 'Tier'].includes(type)) changeCustomerType(type) }} />
+        <select value={customerType} onChange={(e) => changeCustomerType(e.target.value)}
+          className={cn('px-2 py-1.5 border rounded-md text-sm bg-background', !customerType && 'border-amber-400')}>
+          <option value="" disabled hidden>Customer type</option>
+          <option>OEM</option><option>Distributor</option><option>Tier</option>
+        </select>
       </div>
 
-      {/* dropzone */}
-      <div onDragOver={(e) => { e.preventDefault(); setDragActive(true) }} onDragLeave={() => setDragActive(false)} onDrop={onDrop} onClick={() => inputRef.current?.click()}
-        className={cn('rounded-xl border-2 border-dashed p-8 text-center cursor-pointer transition-colors', dragActive ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50')}>
-        <input ref={inputRef} type="file" multiple accept=".xlsx,.xls,.xlsm,.csv,.pdf" className="hidden" onChange={(e) => e.target.files?.length && handleFiles(e.target.files)} />
-        <Upload className="h-7 w-7 mx-auto text-muted-foreground mb-2" />
-        <p className="font-medium">Drop a quote file here, or click to browse</p>
-        <p className="text-sm text-muted-foreground mt-1">Excel (.xlsx) or PDF</p>
-      </div>
-
-      {/* file cards */}
-      {files.map((f) => {
-        const busy = f.busy || working.current.has('price' + f.id) || working.current.has('map' + f.id)
-        const total = f.rows?.length || 0
-        const topN = (f.rows || []).filter((r) => r['Part Number'] && isTop100(r['Part Number'])).length
-        const pmmN = (f.basketRows || []).length
-        const noDataN = (f.basketNoData || []).length
-        const needCustomer = (f.recognized || f.mapped) && total > 0 && !f.customer
-        return (
-          <Card key={f.id}>
-            <CardContent className="pt-5 space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 min-w-0">
-                  {f.filename.toLowerCase().endsWith('.pdf') ? <FileText className="h-5 w-5 text-muted-foreground shrink-0" /> : <FileSpreadsheet className="h-5 w-5 text-muted-foreground shrink-0" />}
-                  <span className="font-medium truncate">{f.filename}</span>
-                  {busy && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-                  {f.detected_format && <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium shrink-0', f.recognized ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200')}>{FORMAT_LABELS[f.detected_format] || f.detected_format}</span>}
-                </div>
-                <button onClick={() => removeFile(f.id)} className="p-1 rounded hover:bg-muted shrink-0"><X className="h-4 w-4" /></button>
+      {/* 3-zone body: [ left | center ]  +  [ drawer ] */}
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-4">
+        <div className="min-h-0 overflow-y-auto pr-1">
+          {selected ? (
+            <div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)] gap-4">
+              <PartWorkspace key={selected.key} item={selected} customer={customer} customerType={customerType} onUpdate={updateItem} />
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {!ready && (
+                <p className="text-center text-lg font-semibold text-amber-600 dark:text-amber-400">First select customer and customer type</p>
+              )}
+              <div onDragOver={(e) => { if (ready) { e.preventDefault(); setDragActive(true) } }} onDragLeave={() => setDragActive(false)} onDrop={onDrop}
+                onClick={() => ready && inputRef.current?.click()}
+                className={cn('rounded-xl border-2 border-dashed flex flex-col items-center justify-center text-center transition-colors p-12 min-h-[420px]',
+                  !ready ? 'opacity-40 cursor-not-allowed border-border' : cn('cursor-pointer', dragActive ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'))}>
+                <input ref={inputRef} type="file" multiple accept=".xlsx,.xls,.xlsm,.csv,.pdf" className="hidden" disabled={!ready} onChange={(e) => e.target.files?.length && handleFiles(e.target.files)} />
+                {uploading ? <Loader2 className="h-12 w-12 text-primary animate-spin mb-3" /> : <Upload className="h-12 w-12 text-muted-foreground mb-3" />}
+                <p className="font-semibold text-2xl">Upload an RFP</p>
+                <p className="text-sm text-muted-foreground mt-2">Drop an Excel or PDF quote here, or click to browse</p>
               </div>
-
-              {f.error && <div className="flex items-start gap-2 text-sm text-destructive"><AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" /> {f.error}</div>}
-              {f.warnings?.map((w, i) => <div key={i} className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400"><AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" /> {w}</div>)}
-
-              {f.detected_format === 'unknown' && !f.error && (
-                <ColumnMapper replyColumns={replyColumns} sourceColumns={f.source_columns || []} sampleData={f.sample_data} suggestions={f.suggestions} mapping={f.mapping || {}} onChange={(m) => setMapping(f.id, m)} />
+              {ready && (
+                <p className="text-center text-sm text-muted-foreground">
+                  Or use{' '}
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-dashed border-primary/50 text-primary font-medium text-xs align-middle">
+                    <Plus className="w-3 h-3" /> Add part(s)
+                  </span>{' '}
+                  to manually add parts to the quote
+                </p>
               )}
+            </div>
+          )}
+        </div>
 
-              {(f.recognized || f.mapped) && total > 0 && (
-                <>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <label className="text-sm font-medium flex items-center gap-1.5 shrink-0"><DollarSign className="h-4 w-4 text-primary" />Customer</label>
-                    <input type="text" value={f.customer || ''} onChange={(e) => setCustomer(f.id, e.target.value)} placeholder="Who is this quote for? (e.g. Boeing, Incora)"
-                      className={cn('flex-1 min-w-[200px] px-3 py-1.5 border rounded-md text-sm bg-background', needCustomer && 'border-amber-400')} />
-                    {f.customer && (
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <label className="text-sm font-medium">Type</label>
-                        <select value={f.customerType || ''} onChange={(e) => setCustomerType(f.id, e.target.value)} className="px-2 py-1.5 border rounded-md text-sm bg-background">
-                          <option value="" disabled hidden>…</option>
-                          <option>OEM</option><option>Distributor</option><option>Tier</option>
-                        </select>
-                      </div>
-                    )}
-                    {needCustomer && <span className="text-xs text-amber-600 dark:text-amber-400">Enter the customer to price.</span>}
-                  </div>
+        {/* RIGHT drawer */}
+        <div className="min-h-0">
+          <QuoteDrawer
+            items={items} selectedKey={selectedKey} onSelect={setSelectedKey} onRemove={removeItem}
+            onAddParts={() => ready && setAddOpen(true)} canAdd={ready} onExport={doExport} exporting={exporting}
+            customer={customer} totalUnits={totals.units} totalRevenue={totals.rev} />
+        </div>
+      </div>
 
-                  {f.customer && (
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-                      <span className="text-muted-foreground">{total} parts:</span>
-                      <span className="text-green-700 dark:text-green-400">{topN} Top-100 (auto-priced)</span>
-                      <span className="text-teal-700 dark:text-teal-400">{pmmN} Trade-Brand</span>
-                      {noDataN > 0 && <span className="text-muted-foreground">{noDataN} no pricing data</span>}
-                      <Button size="sm" variant="outline" className="ml-auto" onClick={() => setShowCart(true)} disabled={!cartLines.length}>
-                        <ShoppingCart className="h-3.5 w-3.5 mr-1.5" /> Open quote
-                      </Button>
-                    </div>
-                  )}
-                </>
-              )}
-            </CardContent>
-          </Card>
-        )
-      })}
+      {/* Add part(s) search popup */}
+      {addOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-[15vh]" onClick={() => setAddOpen(false)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div className="relative bg-card rounded-xl shadow-xl w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+            <div className="relative flex items-center px-5 py-4 border-b">
+              <span className="flex-1 text-center font-medium text-primary">Add a part to quote</span>
+              <button onClick={() => setAddOpen(false)} className="absolute right-4 p-1 rounded hover:bg-muted"><X className="h-4 w-4" /></button>
+            </div>
+            <div className="p-5">
+              <PartSearch autoFocus onPick={(p) => { addParts([{ part: p.part, qtys: [], source: 'search' }], { select: true }); setAddOpen(false) }} />
+            </div>
+          </div>
+        </div>
+      )}
 
-      <QuoteCart open={showCart} onClose={() => setShowCart(false)} lines={cartLines}
-        onSelect={openConfigurator} onRemove={removeLine} onClear={clearAll} onExport={doExport} exporting={exporting} />
+      {/* column mapper modal (unknown formats) */}
+      {mapper && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setMapper(null)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div className="relative bg-card rounded-xl shadow-xl w-full max-w-3xl max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b sticky top-0 bg-card">
+              <div className="flex items-center gap-2 min-w-0">
+                <FileSpreadsheet className="h-5 w-5 text-muted-foreground shrink-0" />
+                <span className="font-medium truncate">{mapper.filename}</span>
+                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">Map columns</span>
+              </div>
+              <button onClick={() => setMapper(null)} className="p-1 rounded hover:bg-muted"><X className="h-4 w-4" /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              {mapper.warnings?.map((w, i) => <div key={i} className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400"><AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" /> {w}</div>)}
+              <ColumnMapper replyColumns={mapper.reply_columns || replyColumns} sourceColumns={mapper.source_columns || []} sampleData={mapper.sample_data}
+                suggestions={mapper.suggestions} mapping={mapper.mapping || {}} onChange={(m) => setMapper((prev) => ({ ...prev, mapping: m }))} />
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setMapper(null)}>Cancel</Button>
+                <Button onClick={confirmMapping} disabled={!mapper.mapping?.['Part Number']}>Add parts</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
