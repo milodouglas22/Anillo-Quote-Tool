@@ -1,4 +1,4 @@
-import { Trash2, Download, Loader2, Plus, AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { Trash2, Download, Loader2, Plus, CheckCircle2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /** Persistent right-hand quote drawer: the list of parts to quote + pinned Download. */
@@ -63,12 +63,6 @@ export default function QuoteDrawer({
           </button>
         </div>
 
-        {blocking.length > 0 && (
-          <div className="px-4 py-2 text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 flex items-center gap-1.5 border-t">
-            <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {blocking.length} part{blocking.length > 1 ? 's' : ''} not yet added to quote.
-          </div>
-        )}
-
         <div className="px-4 py-3 border-t">
           <button onClick={onExport} disabled={!canDownload || exporting}
             className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-md font-semibold text-primary-foreground bg-primary disabled:opacity-40 disabled:cursor-not-allowed transition-opacity">
@@ -76,8 +70,8 @@ export default function QuoteDrawer({
             Download quote
           </button>
           {!canDownload && items.length > 0 && (
-            <p className="mt-1.5 text-[11px] text-muted-foreground text-center">
-              {!customer ? 'Set the customer to price.' : 'Add every part to the quote to enable download.'}
+            <p className="mt-2 text-sm text-muted-foreground text-center">
+              {!customer ? 'Set the customer to price' : 'Add every part to the quote to enable download'}
             </p>
           )}
         </div>
