@@ -1,4 +1,4 @@
-import { Trash2, Download, Loader2, Plus, CheckCircle2, Eye } from 'lucide-react'
+import { Trash2, Download, Loader2, Plus, Check, Eye } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /** Persistent right-hand quote drawer: the list of parts to quote + pinned Download. */
@@ -34,10 +34,12 @@ export default function QuoteDrawer({
                 <div className="flex items-center justify-between gap-2">
                   <div className={cn('font-medium text-sm truncate min-w-0 flex-1', it.confirmed ? 'text-gray-900' : 'text-foreground')} title={it.part}>{it.part}</div>
                   {it.confirmed
-                    ? <CheckCircle2 className="w-7 h-7 shrink-0" style={{ color: '#00A45A' }} />
+                    ? <span className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold text-white" style={{ backgroundColor: '#00A45A' }}>
+                        <Check className="w-3.5 h-3.5" /> Re-priced
+                      </span>
                     : <span className={cn('shrink-0 px-2.5 py-1 rounded-md text-xs font-semibold',
-                        noData ? 'bg-muted text-muted-foreground' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200')}>
-                        {noData ? 'No pricing data' : 'Not priced'}
+                        noData ? 'bg-muted text-muted-foreground' : 'bg-red-600 text-white')}>
+                        {noData ? 'No pricing data' : 'Pending re-pricing'}
                       </span>}
                   <button
                     onClick={(e) => { e.stopPropagation(); onRemove(it.key) }}
