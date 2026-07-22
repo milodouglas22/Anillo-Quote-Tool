@@ -81,10 +81,8 @@ async def customer_suggest(q: str = "", limit: int = 12):
         if canon:
             seen[canon]["type"] = seen[canon]["type"] or row["type"]
             continue
-        fam = family_of(row["name"])
-        # any Boeing/Airbus/Spirit-family customer is priced off that family's contract,
-        # so it IS on-contract even if this exact name isn't a contract-DB row
-        seen[nc] = {"name": row["name"], "family": fam, "on_contract": fam is not None,
+        # not on a contract (distributors, tiers, subsidiaries etc.) — family shown, no contract tag
+        seen[nc] = {"name": row["name"], "family": family_of(row["name"]), "on_contract": False,
                     "type": row["type"], "airbus_enabled": nc in pmm.airbus_enabled}
     hits = []
     for nc, rec in seen.items():
