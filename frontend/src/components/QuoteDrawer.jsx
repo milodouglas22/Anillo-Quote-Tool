@@ -1,15 +1,6 @@
 import { Trash2, Download, Loader2, Plus, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-const STATUS = {
-  quoted:        { cls: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200', label: 'Quoted' },
-  contract:      { cls: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200', label: 'Price list' },
-  needs_config:  { cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200', label: 'Review' },
-  flagged:       { cls: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200', label: 'Flagged' },
-  no_data:       { cls: 'bg-muted text-muted-foreground', label: 'No data' },
-  needs_customer:{ cls: 'bg-muted text-muted-foreground', label: 'Set customer' },
-}
-
 /** Persistent right-hand quote drawer: the list of parts to quote + pinned Download. */
 export default function QuoteDrawer({
   items, selectedKey, onSelect, onRemove, onAddParts, canAdd = true, onExport, exporting, customer,
@@ -33,7 +24,7 @@ export default function QuoteDrawer({
           </div>
         ) : (
           items.map((it) => {
-            const st = STATUS[it.status] || STATUS.needs_config
+            const noData = it.status === 'no_data'
             return (
               <div key={it.key}
                 onClick={() => onSelect(it.key)}
@@ -45,7 +36,10 @@ export default function QuoteDrawer({
                     <div className={cn('font-medium text-sm truncate', it.confirmed ? 'text-gray-900' : 'text-foreground')} title={it.part}>{it.part}</div>
                     {!it.confirmed && (
                       <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
-                        <span className={cn('px-2.5 py-1 rounded-md text-xs font-semibold', st.cls)}>{st.label}</span>
+                        <span className={cn('px-2.5 py-1 rounded-md text-xs font-semibold',
+                          noData ? 'bg-muted text-muted-foreground' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200')}>
+                          {noData ? 'No pricing data' : 'Not priced'}
+                        </span>
                       </div>
                     )}
                   </div>
