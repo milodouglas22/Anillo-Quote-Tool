@@ -1,9 +1,9 @@
-import { Trash2, Download, Loader2, Plus, CheckCircle2 } from 'lucide-react'
+import { Trash2, Download, Loader2, Plus, CheckCircle2, Eye } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /** Persistent right-hand quote drawer: the list of parts to quote + pinned Download. */
 export default function QuoteDrawer({
-  items, selectedKey, onSelect, onRemove, onAddParts, canAdd = true, onExport, exporting, customer,
+  items, selectedKey, onSelect, onRemove, onAddParts, canAdd = true, onPreview, onExport, exporting, customer,
 }) {
   // downloadable once at least one line has been re-priced (confirmed via "Add to quote");
   // only those confirmed lines are written to the workbook.
@@ -63,10 +63,14 @@ export default function QuoteDrawer({
           </button>
         </div>
 
-        <div className="px-4 py-3 border-t">
+        <div className="px-4 py-3 border-t space-y-2">
+          <button onClick={onPreview} disabled={items.length === 0}
+            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md border border-primary/50 text-sm font-medium text-primary hover:bg-primary/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+            <Eye className="w-4 h-4" /> Preview quote
+          </button>
           <button onClick={onExport} disabled={!canDownload || exporting}
             className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-md font-semibold text-primary-foreground bg-primary disabled:opacity-40 disabled:cursor-not-allowed transition-opacity">
-            {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : canDownload ? <CheckCircle2 className="w-4 h-4" /> : <Download className="w-4 h-4" />}
+            {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
             Download quote
           </button>
           {items.length > 0 && (

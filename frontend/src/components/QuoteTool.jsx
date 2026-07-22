@@ -13,6 +13,8 @@ const REPLY_FALLBACK = ['Part Number', 'Qty 1', 'Price 1', 'Qty 2', 'Price 2', '
 const normPart = (s) => String(s ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
 const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 const qtysOf = (row) => ['Qty 1', 'Qty 2', 'Qty 3'].map((k) => row[k]).filter((q) => q !== null && q !== '' && q !== undefined).map(Number)
+const money = (v) => (v == null || v === '') ? '—' : (Math.abs(Number(v)) >= 1 ? '$' + Number(v).toFixed(2) : (Number(v) * 100).toFixed(2) + '¢')
+const qf = (v) => (v == null || v === '') ? '—' : Number(v).toLocaleString()
 let _uid = 0
 // Globally-unique key, immune to HMR resetting the counter (which caused duplicate keys → multi-select).
 const newKey = () => (globalThis.crypto?.randomUUID?.() ?? `p${Date.now().toString(36)}_${++_uid}`)
@@ -27,6 +29,7 @@ export default function QuoteTool() {
   const [priceNonce, setPriceNonce] = useState(0)
   const [mapper, setMapper] = useState(null)          // { filename, raw_records, source_columns, sample_data, suggestions, mapping, customer_guess }
   const [addOpen, setAddOpen] = useState(false)       // "Add part(s)" search popup
+  const [previewOpen, setPreviewOpen] = useState(false) // "Preview quote" table modal
   const [uploading, setUploading] = useState(false)
   const [dragActive, setDragActive] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -238,7 +241,8 @@ export default function QuoteTool() {
         <div className="min-h-0">
           <QuoteDrawer
             items={items} selectedKey={selectedKey} onSelect={setSelectedKey} onRemove={removeItem}
-            onAddParts={() => ready && setAddOpen(true)} canAdd={ready} onExport={doExport} exporting={exporting}
+            onAddParts={() => ready && setAddOpen(true)} canAdd={ready}
+            onPreview={() => setPreviewOpen(true)} onExport={doExport} exporting={exporting}
             customer={customer} totalUnits={totals.units} totalRevenue={totals.rev} />
         </div>
       </div>
@@ -255,6 +259,51 @@ export default function QuoteTool() {
             <div className="p-5">
               <PartSearch autoFocus exclude={new Set(items.map((it) => normPart(it.part)))}
                 onPick={(p) => addParts([{ part: p.part, qtys: [], source: 'search' }])} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preview quote table */}
+      {previewOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-[8vh]">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setPreviewOpen(false)} />
+          <div className="relative bg-card rounded-xl shadow-xl w-full max-w-4xl max-h-[85vh] flex flex-col">
+            <div className="shrink-0 flex items-center justify-between px-5 py-4 border-b">
+              <h3 className="font-semibold text-primary">Quote preview{customer ? ` — ${customer}` : ''}</h3>
+              <button onClick={() => setPreviewOpen(false)} className="p-1 rounded hover:bg-muted"><X className="h-4 w-4" /></button>
+            </div>
+            <div className="overflow-auto px-5 py-4">
+              <table className="w-full text-sm">
+                <thead className="text-white" style={{ backgroundColor: '#3A736F' }}>
+                  <tr>
+                    <th className="py-2 px-3 font-bold text-left">Part Number</th>
+                    <th className="py-2 px-3 font-bold">Qty 1</th><th className="py-2 px-3 font-bold">Price 1</th>
+                    <th className="py-2 px-3 font-bold">Qty 2</th><th className="py-2 px-3 font-bold">Price 2</th>
+                    <th className="py-2 px-3 font-bold">Qty 3</th><th className="py-2 px-3 font-bold">Price 3</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((it) => (
+                    <tr key={it.key} className="border-b border-border/50">
+                      <td className="py-2 px-3 font-medium">{it.part}</td>
+                      {it.confirmed && it.row ? (
+                        <>
+                          <td className="py-2 px-3 text-center tabular-nums">{qf(it.row['Qty 1'])}</td>
+                          <td className="py-2 px-3 text-center tabular-nums">{it.row['Qty 1'] ? money(it.row['Price 1']) : '—'}</td>
+                          <td className="py-2 px-3 text-center tabular-nums">{qf(it.row['Qty 2'])}</td>
+                          <td className="py-2 px-3 text-center tabular-nums">{it.row['Qty 2'] ? money(it.row['Price 2']) : '—'}</td>
+                          <td className="py-2 px-3 text-center tabular-nums">{qf(it.row['Qty 3'])}</td>
+                          <td className="py-2 px-3 text-center tabular-nums">{it.row['Qty 3'] ? money(it.row['Price 3']) : '—'}</td>
+                        </>
+                      ) : (
+                        <td colSpan={6} className="py-2 px-3 text-center italic text-amber-700 dark:text-amber-400">Pending re-pricing</td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {items.length === 0 && <p className="text-muted-foreground text-sm py-4 text-center">No parts in the quote yet.</p>}
             </div>
           </div>
         </div>

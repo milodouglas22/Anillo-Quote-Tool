@@ -163,6 +163,12 @@ export default function PartWorkspace({ item, customer, customerType, onUpdate }
   }
   const anomaly = contractRow?._status?.anomaly
 
+  // no two quantity breaks may share the same quantity
+  const qtyCounts = {}
+  qtys.forEach((q) => { if (q !== '' && q != null) qtyCounts[q] = (qtyCounts[q] || 0) + 1 })
+  const isDupQty = (i) => qtys[i] !== '' && qtys[i] != null && qtyCounts[qtys[i]] > 1
+  const hasDupQty = Object.values(qtyCounts).some((c) => c > 1)
+
   // ===== LEFT COLUMN: part info + selections =====
   const left = (
     <div className="space-y-4 min-w-0">
@@ -333,7 +339,9 @@ export default function PartWorkspace({ item, customer, customerType, onUpdate }
                   )}
                   <div className="flex items-center justify-center gap-1">
                     <input inputMode="numeric" value={qtyf(qtys[i])} onChange={(e) => setQty(i, e.target.value)} placeholder="1,000"
-                      className="w-24 text-center border rounded-md px-2 py-1 text-sm bg-background tabular-nums focus:outline-none focus:ring-2 focus:ring-ring" />
+                      title={isDupQty(i) ? 'Duplicate quantity — each break must be a different quantity' : undefined}
+                      className={cn('w-24 text-center border rounded-md px-2 py-1 text-sm bg-background tabular-nums focus:outline-none focus:ring-2',
+                        isDupQty(i) ? 'border-red-400 ring-1 ring-red-400 focus:ring-red-400' : 'focus:ring-ring')} />
                     <span className="text-sm text-muted-foreground">units</span>
                   </div>
                   <div className="text-2xl font-bold mt-2 tabular-nums">{b.unit_price != null ? cents(b.unit_price) : '—'}</div>
@@ -345,7 +353,7 @@ export default function PartWorkspace({ item, customer, customerType, onUpdate }
             {qtys.length < 3 && (
               <button onClick={addBreak}
                 className="rounded-lg border border-dashed border-primary/50 p-4 flex flex-col items-center justify-center gap-1 text-primary hover:bg-primary/5 transition-colors min-h-[120px]">
-                <Plus className="w-5 h-5" /> <span className="text-sm font-medium">Add quantity break</span>
+                <Plus className="w-5 h-5" /> <span className="text-sm font-medium">Quote price at a different quantity</span>
               </button>
             )}
           </div>
@@ -364,7 +372,7 @@ export default function PartWorkspace({ item, customer, customerType, onUpdate }
 
         <div className="shrink-0 border-t px-5 py-3 flex justify-end">
           <button onClick={() => { onUpdateRef.current(item.key, { confirmed: true }); setShowPane(false) }}
-            disabled={!qtys.some((q) => q) || (!isContract && !ref)}
+            disabled={!qtys.some((q) => q) || hasDupQty || (!isContract && !ref)}
             className="inline-flex items-center gap-2 px-5 py-2 rounded-md font-semibold text-primary-foreground bg-primary disabled:opacity-40 disabled:cursor-not-allowed">
             <Check className="w-4 h-4" /> Add to quote
           </button>
