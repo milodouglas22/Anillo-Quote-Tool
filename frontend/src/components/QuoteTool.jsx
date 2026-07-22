@@ -297,7 +297,7 @@ export default function QuoteTool() {
                           <td className="py-2 px-3 text-center tabular-nums">{it.row['Qty 3'] ? money(it.row['Price 3']) : '—'}</td>
                         </>
                       ) : (
-                        <td colSpan={6} className="py-2 px-3 text-center italic text-amber-700 dark:text-amber-400">Pending re-pricing</td>
+                        <td colSpan={6} className="py-2 px-3 text-center font-bold text-foreground">Pending re-pricing</td>
                       )}
                     </tr>
                   ))}
