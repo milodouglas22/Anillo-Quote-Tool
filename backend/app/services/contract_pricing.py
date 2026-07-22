@@ -36,7 +36,11 @@ CONTRACT_SITE = os.environ.get("CONTRACT_SITE", "Anillo")
 QTY_THRESHOLD = 50_000
 MARKUP_HIGH_VOL = 1.40   # qty >= threshold
 MARKUP_LOW_VOL = 1.60    # qty <  threshold
-BOEING_OFFER_BUCKET_COL = 17   # "Bucket Price 6" = the accepted floor
+BOEING_OFFER_BUCKET_COL = 17   # "Bucket Price 6" = the accepted floor (anchor for non-contract markup)
+# Boeing offer volume tiers: "Max Bucket Quantity 1..10" in cols 2..11, "Bucket Price 1..10" in cols 12..21.
+BOEING_MAXQTY_COL0 = 2         # first Max Bucket Quantity column
+BOEING_PRICE_COL0 = 12         # first Bucket Price column
+BOEING_N_BUCKETS = 10
 
 
 def norm_part(s) -> str:
@@ -72,22 +76,50 @@ def contract_price(contract: dict, nc: str):
     return None
 
 
-def _load_boeing_offer() -> dict:
+def _load_boeing_offer():
+    """Returns (floor, buckets):
+      floor[pn]   = Bucket Price 6 (col 17) — the accepted floor / non-contract anchor (unchanged).
+      buckets[pn] = [(max_qty, price), ...] for buckets 1..10, ascending by max_qty — the
+                    volume-tiered contract price a Boeing customer actually pays."""
     if not os.path.exists(BOEING_OFFER_PATH):
-        return {}
+        return {}, {}
     wb = openpyxl.load_workbook(BOEING_OFFER_PATH, data_only=True, read_only=True)
     ws = wb["New Boeing Offer"] if "New Boeing Offer" in wb.sheetnames else wb.worksheets[0]
     it = ws.iter_rows(values_only=True)
     next(it); next(it)   # two header rows
-    out = {}
+    floor, buckets = {}, {}
     for r in it:
         if not r or r[0] is None:
             continue
-        p = r[BOEING_OFFER_BUCKET_COL] if len(r) > BOEING_OFFER_BUCKET_COL else None
-        if isinstance(p, (int, float)):
-            out[norm_part(r[0])] = round(float(p), 6)
+        pn = norm_part(r[0])
+        p6 = r[BOEING_OFFER_BUCKET_COL] if len(r) > BOEING_OFFER_BUCKET_COL else None
+        if isinstance(p6, (int, float)):
+            floor[pn] = round(float(p6), 6)
+        bk = []
+        for i in range(BOEING_N_BUCKETS):
+            mq = r[BOEING_MAXQTY_COL0 + i] if len(r) > BOEING_MAXQTY_COL0 + i else None
+            pr = r[BOEING_PRICE_COL0 + i] if len(r) > BOEING_PRICE_COL0 + i else None
+            if isinstance(mq, (int, float)) and isinstance(pr, (int, float)):
+                bk.append((float(mq), round(float(pr), 6)))
+        if bk:
+            bk.sort(key=lambda x: x[0])
+            buckets[pn] = bk
     wb.close()
-    return out
+    return floor, buckets
+
+
+def boeing_bucket_price(buckets, qty):
+    """Volume-matched Boeing bucket price: first bucket whose Max Bucket Quantity >= qty
+    (buckets ascending). Above all tiers -> the highest-volume (floor) price."""
+    if not buckets:
+        return None
+    q = qty if isinstance(qty, (int, float)) and qty > 0 else None
+    if q is None:
+        return buckets[-1][1]   # no qty -> floor
+    for max_qty, price in buckets:
+        if q <= max_qty:
+            return price
+    return buckets[-1][1]
 
 
 @dataclass
@@ -105,7 +137,8 @@ class PricingEngine:
     def __init__(self):
         self._loaded = False
         self._lock = threading.Lock()
-        self.boeing: dict[str, float] = {}                     # norm_part -> accepted offer price
+        self.boeing: dict[str, float] = {}                     # norm_part -> accepted offer floor (Bucket 6)
+        self.boeing_buckets: dict[str, list] = {}              # norm_part -> [(max_qty, price)] volume tiers
         self.contract: dict[str, dict[str, float]] = {}        # norm_part -> {norm_cust: price}
         self.family_price: dict[str, dict[str, float]] = {}    # norm_part -> {family: max price}
         self.baseline_map: dict[str, float] = {}               # norm_part -> anchor (higher of Boeing/Airbus)
@@ -123,7 +156,7 @@ class PricingEngine:
             self._loaded = True
 
     def _load(self):
-        self.boeing = _load_boeing_offer()
+        self.boeing, self.boeing_buckets = _load_boeing_offer()
 
         wb = openpyxl.load_workbook(CONTRACT_DB_PATH, data_only=True, read_only=True)
         ws = wb["Consolidated Contracts"] if "Consolidated Contracts" in wb.sheetnames else wb.worksheets[0]
@@ -202,7 +235,15 @@ class PricingEngine:
         baseline = self.baseline_map.get(pn)
         nc = norm_cust(customer)
         fam = family_of(customer)
-        # on-contract customer -> the contract price (Boeing-family -> accepted offer)
+        q = qty if isinstance(qty, (int, float)) else 0
+        # Boeing customer on a Boeing-offer part -> the bucket price for the ordered VOLUME
+        # (NOT the Bucket-6 floor, which is only the anchor for non-contract markup).
+        if fam == "Boeing" and pn in self.boeing_buckets:
+            bp = boeing_bucket_price(self.boeing_buckets[pn], q)
+            if bp is not None:
+                return PriceResult(True, False, "contract", round(bp, 6), baseline=baseline,
+                                   matched_customer=customer, reason="Boeing bucket price (volume-matched)")
+        # other on-contract customer -> the contract price
         cp = contract_price(self.contract.get(pn, {}), nc)
         if cp is None and fam == "Boeing" and pn in self.boeing:
             cp = self.boeing[pn]
