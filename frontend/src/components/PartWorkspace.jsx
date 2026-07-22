@@ -26,6 +26,16 @@ const datef = (v) => {
   const m = String(v).slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/)
   return m ? `${m[2]}/${m[3]}/${m[1]}` : String(v).slice(0, 10)
 }
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+// "2026 Feb–Jun" style label spanning the min/max dates in the rows (null if no dated rows)
+const dateRangeLabel = (rows) => {
+  const ym = (rows || []).map((o) => String(o.date).slice(0, 7)).filter((s) => /^\d{4}-\d{2}$/.test(s)).sort()
+  if (!ym.length) return null
+  const [y1, m1] = ym[0].split('-'); const [y2, m2] = ym[ym.length - 1].split('-')
+  const a = MON[+m1 - 1]; const b = MON[+m2 - 1]
+  if (y1 === y2) return m1 === m2 ? `${y1} ${a}` : `${y1} ${a}–${b}`
+  return `${a} ${y1}–${b} ${y2}`
+}
 
 /**
  * Selected-part workspace. Renders TWO grid columns as a fragment:
@@ -275,7 +285,9 @@ export default function PartWorkspace({ item, customer, customerType, onUpdate }
       {/* bookings history */}
       <div className="border rounded-xl p-5 bg-card">
         <div className="flex items-center justify-between mb-2">
-          <h3 className="font-semibold text-[1.05rem] uppercase tracking-wide text-primary">Bookings history</h3>
+          <h3 className="font-semibold text-[1.05rem] uppercase tracking-wide text-primary">
+            {dateRangeLabel(orders) ? `${dateRangeLabel(orders)} bookings history` : 'Bookings history'}
+          </h3>
           {!isContract && hasBookings && <span className="text-xs text-muted-foreground">Click a row to set the reference order</span>}
         </div>
         {loadingCtx ? (
