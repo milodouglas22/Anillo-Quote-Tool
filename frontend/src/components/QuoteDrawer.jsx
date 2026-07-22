@@ -5,9 +5,9 @@ import { cn } from '@/lib/utils'
 export default function QuoteDrawer({
   items, selectedKey, onSelect, onRemove, onAddParts, canAdd = true, onExport, exporting, customer,
 }) {
-  // a line counts only once the user has confirmed it via "Add to quote" in the pricing pane
-  const blocking = items.filter((it) => !it.confirmed)
-  const canDownload = items.length > 0 && blocking.length === 0 && !!customer
+  // downloadable once at least one line has been re-priced (confirmed via "Add to quote");
+  // only those confirmed lines are written to the workbook.
+  const canDownload = items.some((it) => it.confirmed) && !!customer
 
   return (
     <aside className="flex flex-col h-full min-h-0 rounded-xl border bg-card">
@@ -69,9 +69,9 @@ export default function QuoteDrawer({
             {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : canDownload ? <CheckCircle2 className="w-4 h-4" /> : <Download className="w-4 h-4" />}
             Download quote
           </button>
-          {!canDownload && items.length > 0 && (
+          {items.length > 0 && (
             <p className="mt-2 text-sm text-muted-foreground text-center">
-              {!customer ? 'Set the customer to price' : 'Add every part to the quote to enable download'}
+              {!customer ? 'Set the customer to price' : 'Only parts that have been re-priced will appear in the download'}
             </p>
           )}
         </div>
