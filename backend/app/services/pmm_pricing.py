@@ -28,6 +28,7 @@ import openpyxl
 _HERE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # backend/
 PMM_WORKBOOK_PATH = os.environ.get("PMM_WORKBOOK_PATH", os.path.join(_HERE, "data", "pmm_workbook.xlsx"))
 
+ANCHOR_QTY = 100_000   # fixed anchor/reference volume for the volume factor, all parts
 UNKNOWN_MATURITY = {"", "other / unknown", "unknown", "n/a"}
 MODEST_CRES = {"CRES", "HIGH TEMP CRES", "STAINLESS STEEL"}
 MODEST_ALU = {"ALUMINUM", "ALUMINUM ALLOY"}
@@ -90,6 +91,7 @@ class PartContext:
     reference_orders: list[dict] = field(default_factory=list)  # grouped by date+customer
     shipments_2025: dict | None = None          # {units, value, asp, n} — 2025 EA shipments total
     shipment_orders: list[dict] = field(default_factory=list)   # 2025 shipments grouped by date+customer
+    bookings_range: dict | None = None          # {min, max} ISO — full span of ALL bookings (global)
 
 
 @dataclass
@@ -129,6 +131,8 @@ class PMMEngine:
         self.ship_2025_rows: dict[str, list] = defaultdict(list)  # norm_part -> [{date, customer, qty, value}]
         self.customer_rows: list[dict] = []       # [{name, type}] from Unique Customers (display names)
         self.airbus_enabled: set[str] = set()     # norm_cust of Airbus-enabled suppliers
+        self.bookings_min = None                  # earliest Book Date across ALL bookings
+        self.bookings_max = None                  # latest Book Date across ALL bookings
 
     # ------------------------------------------------------------------ #
     def ensure_loaded(self):
@@ -270,6 +274,11 @@ class PMMEngine:
             price = r[13] if isinstance(r[13], (int, float)) else None
             val = r[11] if isinstance(r[11], (int, float)) else None
             date = r[6]
+            if hasattr(date, "isoformat"):   # track global bookings date span
+                if self.bookings_min is None or date < self.bookings_min:
+                    self.bookings_min = date
+                if self.bookings_max is None or date > self.bookings_max:
+                    self.bookings_max = date
             cust = str(r[2]).strip() if r[2] else ""
             g["orders"].append({"date": date, "qty": qty, "unit_price": price, "value": val, "customer": cust})
             if qty:
@@ -370,24 +379,27 @@ class PMMEngine:
         out.sort(key=lambda x: x["date"], reverse=True)
         return out
 
+    def _bookings_range(self):
+        if not (self.bookings_min and self.bookings_max):
+            return None
+        return {"min": self.bookings_min.isoformat(), "max": self.bookings_max.isoformat()}
+
     def part_context(self, part: str) -> PartContext:
         self.ensure_loaded()
         pn = norm_part(part)
         ship = self._shipments_2025(pn)
         ship_orders = self._shipment_orders(pn)
+        brange = self._bookings_range()
         g = self.parts.get(pn)
         if not g:
-            return PartContext(part=part, found=False, shipments_2025=ship, shipment_orders=ship_orders)
+            return PartContext(part=part, found=False, shipments_2025=ship, shipment_orders=ship_orders,
+                               bookings_range=brange)
         maturity = g["maturity"]
         tp = self._derive_trade_position(maturity, g["material"], g["finish"], pn)
         framework = ("Trade Brand Strategy"
                      if str(maturity or "").strip().lower() in UNKNOWN_MATURITY
                      else "Platform Maturity Strategy")
-        anchor = None
-        if g["qtys"]:
-            anchor = Counter(g["qtys"]).most_common(1)[0][0]  # MODE (fallback avg)
-            if list(g["qtys"]).count(anchor) == 1:
-                anchor = round(sum(g["qtys"]) / len(g["qtys"]))
+        anchor = ANCHOR_QTY   # fixed 100k reference volume across all parts
         # group orders by (date, customer) -> value-weighted price
         grp = defaultdict(lambda: {"qty": 0.0, "value": 0.0, "customer": "", "date": None})
         for o in g["orders"]:
@@ -410,7 +422,7 @@ class PMMEngine:
             part=g["orig"], found=True, uom=g["uom"], material=g["material"], finish=g["finish"],
             platform=g["platform"], maturity=maturity or "Unknown", trade_position=tp, framework=framework,
             anchor_qty=anchor, cost_per_unit=cost, reference_orders=refs, shipments_2025=ship,
-            shipment_orders=ship_orders,
+            shipment_orders=ship_orders, bookings_range=brange,
         )
 
     def _min_gm(self, ctx: PartContext, supplier_dynamic: str | None) -> float | None:

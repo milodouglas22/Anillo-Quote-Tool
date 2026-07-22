@@ -84,6 +84,9 @@ export default function PartWorkspace({ item, customer, customerType, onUpdate }
   const orders = ctx?.reference_orders || []
   const shipOrders = ctx?.shipment_orders || []
   const hasBookings = orders.length > 0
+  // global bookings date span (same for every part; changes only if a broader dataset is loaded)
+  const bookingsRangeLabel = ctx?.bookings_range
+    ? dateRangeLabel([{ date: ctx.bookings_range.min }, { date: ctx.bookings_range.max }]) : null
   // reference comes from 2026 bookings; only from 2025 shipments when there are no bookings
   const refList = hasBookings ? orders : shipOrders
   const ref = refList[refIdx]
@@ -183,17 +186,17 @@ export default function PartWorkspace({ item, customer, customerType, onUpdate }
   const left = (
     <div className="space-y-4 min-w-0">
       <div className="bg-card rounded-xl p-4 border">
-        <div className="flex items-center justify-between gap-2 mb-3">
-          <h3 className="font-semibold text-[1.05rem] uppercase tracking-wide text-primary">Part info</h3>
+        <h3 className="font-semibold text-[1.05rem] uppercase tracking-wide text-primary mb-3">Part info</h3>
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-lg font-bold break-all">{part}</div>
           {(() => {
             const catKey = isContract ? 'contract'
               : (!isTradeBrand ? 'platform_maturity'
                 : (tradePosition === 'Modest Position' ? 'modest_trade_brand' : 'strong_trade_brand'))
             const cat = CATEGORY[catKey] || CATEGORY.unknown
-            return <span className={cn('inline-flex items-center rounded-md px-2.5 py-1 text-xs font-semibold', cat.cls)}>{cat.label}</span>
+            return <span className={cn('shrink-0 inline-flex items-center rounded-md px-2.5 py-1 text-xs font-semibold', cat.cls)}>{cat.label}</span>
           })()}
         </div>
-        <div className="text-lg font-bold break-all">{part}</div>
         {loadingCtx ? (
           <div className="flex items-center gap-2 text-muted-foreground text-sm mt-3"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</div>
         ) : (
@@ -285,8 +288,8 @@ export default function PartWorkspace({ item, customer, customerType, onUpdate }
       {/* bookings history */}
       <div className="border rounded-xl p-5 bg-card">
         <div className="flex items-center justify-between mb-2">
-          <h3 className="font-semibold text-[1.05rem] uppercase tracking-wide text-primary">
-            {dateRangeLabel(orders) ? `${dateRangeLabel(orders)} bookings history` : 'Bookings history'}
+          <h3 className="font-semibold text-[1.05rem] tracking-wide text-primary">
+            {bookingsRangeLabel ? `${bookingsRangeLabel} bookings history` : 'Bookings history'}
           </h3>
           {!isContract && hasBookings && <span className="text-xs text-muted-foreground">Click a row to set the reference order</span>}
         </div>
@@ -302,7 +305,7 @@ export default function PartWorkspace({ item, customer, customerType, onUpdate }
       {/* 2025 shipments history — same table format; the reference source when there are no bookings */}
       <div className="border rounded-xl p-5 bg-card">
         <div className="flex items-center justify-between mb-2">
-          <h3 className="font-semibold text-[1.05rem] uppercase tracking-wide text-primary">2025 shipments history</h3>
+          <h3 className="font-semibold text-[1.05rem] tracking-wide text-primary">2025 shipments history</h3>
         </div>
         {loadingCtx ? (
           <div className="flex items-center gap-2 text-muted-foreground text-sm"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</div>
